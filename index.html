@@ -830,6 +830,9 @@
     let curPose = '待机';     // 当前识别到的姿势（HUD 展示）
     let engineState = 'idle'; // idle | loading | ok | failed
     let healthTimer = 0;
+    let resultsCount = 0;     // onResults 被回调次数（判断推理循环是否在跑）
+    let dbgVisible = true;    // 调试面板开关（按 D 切换）
+    let dbg = { hands: 0, pose: '-', ext: '-', pinch: '-', palm: '-', target: '-' }; // 调试面板数据
 
     function canFire(name, ms) {
       const t = performance.now();
@@ -883,27 +886,28 @@
       prevWrist = { x: pc.x, y: pc.y, z: pc.z, t: now };
     
       const speedH = Math.abs(vx);
-      // 若未选中目标，自动就近锁定手掌附近的物体
+      // 调试：指伸展数、捏合间距（归一化）
+      const extCount = [isExt(lm, 8, 6), isExt(lm, 12, 10), isExt(lm, 16, 14), isExt(lm, 20, 18)].filter(Boolean).length;
+      const pinchGap = (dist(lm[4], lm[8]) / (dist(lm[0], lm[9]) || 1)).toFixed(2);
+      // 目标：优先手动选中，否则就近锁定（半径 500）
       let sel = selectedObj();
-      if (!sel) {
-        const near = nearestObj(pc.x, pc.y, 360);
-        if (near) { selectObject(near.id); sel = near; }
-      }
-    
+      if (!sel) { const near = nearestObj(pc.x, pc.y, 500); if (near) { selectObject(near.id); sel = near; } }
+      dbg = { hands: all.length, pose: curPose, ext: extCount + '/4', pinch: pinchGap, palm: Math.round(pc.x) + ',' + Math.round(pc.y), target: sel ? sel.name : '无' };
+      
       // 1) 双手横扫：两只手且快速横向移动
       if (all.length >= 2 && speedH > 350 && canFire('sweep', 600)) {
         actSweep(pc.y); setGesture('双手横扫'); return;
       }
-      // 2) 握拳挥拳→击打（阈值降低，只要握拳并移动就出拳）
-      if (isFist(lm) && speedH > 160 && canFire('hit', 220)) {
-        if (sel) { actHit(sel, clamp(speedH / 1000, 0.5, 1)); setGesture('握拳挥拳'); }
-        else setGesture('握拳(附近无目标)');
+      // 2) 握拳→连续击打（姿态保持式，握住就一直打，无需快速挥动）
+      if (isFist(lm)) {
+        setGesture('握拳');
+        if (canFire('hit', 340)) { const t = sel || nearestObj(pc.x, pc.y, 99999); if (t) actHit(t, 0.85); }
         return;
       }
       // 3) 捏合抓取：抓住/就近物体，拖动，松开甩出
       if (isPinch(lm)) {
         if (!pinchHeld) {
-          let target = sel && Math.abs(sel.x - pc.x) < 260 ? sel : (pickObject(pc.x, pc.y) || nearestObj(pc.x, pc.y, 260));
+          let target = sel && Math.abs(sel.x - pc.x) < 320 ? sel : (pickObject(pc.x, pc.y) || nearestObj(pc.x, pc.y, 320));
           if (target) {
             if (state.selectedId !== target.id) { selectObject(target.id); }
             grabbed = { obj: target, offX: target.x - pc.x, offY: target.y - pc.y, lastX: pc.x, lastY: pc.y, vx: 0, vy: 0 };
@@ -917,27 +921,28 @@
         }
         pinchHeld = true; setGesture('捏合抓取'); return;
       } else if (pinchHeld) {
-        // 刚松开→甩出
         pinchHeld = false;
         if (grabbed) { actThrow(grabbed.obj, clamp(grabbed.vx, -1200, 1200), clamp(grabbed.vy - 200, -1200, 1200)); grabbed = null; }
       }
       // 4) 手掌向下猛拍：张开手 + 向下高速
-      if (isOpenPalm(lm) && vy > 550 && canFire('slap', 500)) {
-        const t = nearestObj(pc.x, pc.y, 260) || sel;
+      if (isOpenPalm(lm) && vy > 500 && canFire('slap', 500)) {
+        const t = sel || nearestObj(pc.x, pc.y, 99999);
         if (t) { actSlap(t); setGesture('下拍'); }
         return;
       }
       // 5) 手掌向前推送：z 快速减小（靠近镜头）
       if (isOpenPalm(lm) && vz < -0.9 && canFire('push', 500)) {
-        if (sel) { actPush(sel); setGesture('前推'); }
+        const t = sel || nearestObj(pc.x, pc.y, 99999);
+        if (t) { actPush(t); setGesture('前推'); }
         return;
       }
-      // 6) 张开手掌靠近→吓一吓
-      if (isOpenPalm(lm) && speedH < 220 && Math.abs(vy) < 300) {
-        const t = nearestObj(pc.x, pc.y, 160);
-        if (t && canFire('scare', 1400)) { actScare(t); setGesture('张掌吓唬'); }
-        else setGesture('张掌(保持靠近目标)');
+      // 6) 张开手掌保持→吓一吓（姿态保持式）
+      if (isOpenPalm(lm)) {
+        setGesture('张掌');
+        if (canFire('scare', 1200)) { const t = sel || nearestObj(pc.x, pc.y, 99999); if (t) actScare(t); }
+        return;
       }
+      setGesture('手(' + extCount + '/4指)');
     }
 
     // 就近物体（排除基础桌面/已碎）
@@ -979,6 +984,25 @@
       sctx.restore();
     }
 
+    // 左下角常驻调试面板（便于定位手势问题，按 D 开关）
+    function drawDebug() {
+      if (!dbgVisible) return;
+      const x = 14, y = CANVAS_H - 138, w = 330, h = 124;
+      sctx.save();
+      sctx.fillStyle = 'rgba(0,0,0,.72)';
+      sctx.beginPath(); sctx.roundRect ? sctx.roundRect(x, y, w, h, 10) : sctx.rect(x, y, w, h); sctx.fill();
+      sctx.strokeStyle = 'rgba(251,191,36,.5)'; sctx.lineWidth = 2;
+      sctx.beginPath(); sctx.roundRect ? sctx.roundRect(x, y, w, h, 10) : sctx.rect(x, y, w, h); sctx.stroke();
+      sctx.font = '15px Consolas, monospace'; sctx.textAlign = 'left'; sctx.textBaseline = 'top';
+      const engCol = engineState === 'ok' ? '#4ade80' : (engineState === 'failed' ? '#f87171' : '#fbbf24');
+      sctx.fillStyle = '#fbbf24'; sctx.fillText('🔧 调试面板 (按 D 关闭)', x + 12, y + 10);
+      sctx.fillStyle = engCol; sctx.fillText('引擎: ' + engineState + '  帧:' + resultsCount, x + 12, y + 34);
+      sctx.fillStyle = '#fff'; sctx.fillText('手: ' + dbg.hands + '   姿势: ' + curPose, x + 12, y + 58);
+      sctx.fillText('指伸: ' + dbg.ext + '  捏距: ' + dbg.pinch, x + 12, y + 82);
+      sctx.fillText('掌心: ' + dbg.palm + '  目标: ' + dbg.target, x + 12, y + 106);
+      sctx.restore();
+    }
+
     // 初始化 MediaPipe Hands
     async function initHands() {
       if (handsReady) return true;
@@ -987,7 +1011,7 @@
         hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}` });
         hands.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         hands.onResults((res) => {
-          lastResultTime = performance.now();
+          lastResultTime = performance.now(); resultsCount++;
           if (res.image) { camCanvas.width = res.image.width; camCanvas.height = res.image.height; }
           cctx.save();
           cctx.clearRect(0, 0, camCanvas.width, camCanvas.height);
@@ -1119,6 +1143,7 @@
       }
       sctx.restore();
       drawLighting();
+      drawDebug(); // 常驻调试面板
 
       requestAnimationFrame(frame);
     }
@@ -1248,6 +1273,8 @@
     });
     // 首次全局点击解锁音频
     window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); }, { once: false });
+    // 按 D 键切换调试面板
+    window.addEventListener('keydown', (e) => { if (e.key === 'd' || e.key === 'D') dbgVisible = !dbgVisible; });
 
     // ============================================================
     // 【启动】
