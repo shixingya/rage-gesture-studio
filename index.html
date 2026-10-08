@@ -98,7 +98,15 @@
       <div id="camBox">
         <video id="camVideo" playsinline></video>
         <canvas id="camCanvas"></canvas>
-        <div id="camTip" class="absolute inset-0 flex items-center justify-center text-xs text-center px-2 bg-black/60">
+        <!-- 手势 HUD：引擎状态 / 检测手数 / 当前姿势 -->
+        <div id="camHud" class="absolute left-0 right-0 bottom-0 px-2 py-1 bg-black/70 text-[11px] leading-tight">
+          <div class="flex justify-between">
+            <span>引擎：<b id="hudEngine" class="text-white/60">未启动</b></span>
+            <span>手：<b id="hudHands" class="text-white/60">0</b></span>
+          </div>
+          <div>姿势：<span id="hudPose" class="text-amber-300 font-bold">待机</span></div>
+        </div>
+        <div id="camTip" class="absolute inset-0 flex items-center justify-center text-xs text-center px-2 bg-black/60" style="white-space:pre-line">
           摄像头已关闭
         </div>
       </div>
@@ -817,6 +825,11 @@
     let prevWrist = null;     // 上一帧手腕 {x,y,z,t} 用于测速
     let pinchHeld = false;    // 当前是否处于捏合抓取
     const cooldown = {};      // 各手势冷却时间
+    let lastLandmarks = null; // 最近一帧手部 landmarks，用于主画面骨骼叠加
+    let handsDetected = 0;    // 当前检测到的手数量
+    let curPose = '待机';     // 当前识别到的姿势（HUD 展示）
+    let engineState = 'idle'; // idle | loading | ok | failed
+    let healthTimer = 0;
 
     function canFire(name, ms) {
       const t = performance.now();
@@ -851,12 +864,14 @@
     // 分析手部结果→触发手势
     function analyzeHands(res) {
       const all = res.multiHandLandmarks || [];
-      if (all.length === 0) { handCursor.active = false; pinchHeld = false; prevWrist = null; setGesture('待机'); return; }
+      handsDetected = all.length; lastLandmarks = all;
+      if (engineState !== 'ok') setEngineState('ok');
+      if (all.length === 0) { handCursor.active = false; pinchHeld = false; prevWrist = null; setGesture('检测中…无手'); return; }
       const now = performance.now();
       const lm = all[0];
       const pc = palmCenter(lm);
       handCursor.x = pc.x; handCursor.y = pc.y; handCursor.active = true;
-
+    
       // 测速
       let vx = 0, vy = 0, vz = 0, dt = 0.016;
       if (prevWrist) {
@@ -866,26 +881,29 @@
         vz = (pc.z - prevWrist.z) / dt;
       }
       prevWrist = { x: pc.x, y: pc.y, z: pc.z, t: now };
-
+    
       const speedH = Math.abs(vx);
-      const sel = selectedObj();
-
-      // 1) 双手横扫：两只手且都快速横向移动
-      if (all.length >= 2 && speedH > 500 && canFire('sweep', 600)) {
+      // 若未选中目标，自动就近锁定手掌附近的物体
+      let sel = selectedObj();
+      if (!sel) {
+        const near = nearestObj(pc.x, pc.y, 360);
+        if (near) { selectObject(near.id); sel = near; }
+      }
+    
+      // 1) 双手横扫：两只手且快速横向移动
+      if (all.length >= 2 && speedH > 350 && canFire('sweep', 600)) {
         actSweep(pc.y); setGesture('双手横扫'); return;
       }
-      // 2) 握拳挥拳→击打
-      if (isFist(lm) && speedH > 420 && canFire('hit', 240)) {
-        if (sel) { actHit(sel, clamp(speedH / 1600, 0.4, 1)); setGesture('握拳挥拳'); }
-        else setGesture('握拳(未选目标)');
+      // 2) 握拳挥拳→击打（阈值降低，只要握拳并移动就出拳）
+      if (isFist(lm) && speedH > 160 && canFire('hit', 220)) {
+        if (sel) { actHit(sel, clamp(speedH / 1000, 0.5, 1)); setGesture('握拳挥拳'); }
+        else setGesture('握拳(附近无目标)');
         return;
       }
-      // 3) 捏合抓取：抓住选中/就近物体，拖动，松开甩出
+      // 3) 捏合抓取：抓住/就近物体，拖动，松开甩出
       if (isPinch(lm)) {
         if (!pinchHeld) {
-          // 刚开始捏：就近拾取（优先选中物，否则命中测试）
-          let target = sel && Math.abs(sel.x - pc.x) < 200 ? sel : pickObject(pc.x, pc.y);
-          if (!target) target = nearestObj(pc.x, pc.y, 180);
+          let target = sel && Math.abs(sel.x - pc.x) < 260 ? sel : (pickObject(pc.x, pc.y) || nearestObj(pc.x, pc.y, 260));
           if (target) {
             if (state.selectedId !== target.id) { selectObject(target.id); }
             grabbed = { obj: target, offX: target.x - pc.x, offY: target.y - pc.y, lastX: pc.x, lastY: pc.y, vx: 0, vy: 0 };
@@ -904,20 +922,21 @@
         if (grabbed) { actThrow(grabbed.obj, clamp(grabbed.vx, -1200, 1200), clamp(grabbed.vy - 200, -1200, 1200)); grabbed = null; }
       }
       // 4) 手掌向下猛拍：张开手 + 向下高速
-      if (isOpenPalm(lm) && vy > 900 && canFire('slap', 500)) {
-        const t = nearestObj(pc.x, pc.y, 220) || sel;
+      if (isOpenPalm(lm) && vy > 550 && canFire('slap', 500)) {
+        const t = nearestObj(pc.x, pc.y, 260) || sel;
         if (t) { actSlap(t); setGesture('下拍'); }
         return;
       }
       // 5) 手掌向前推送：z 快速减小（靠近镜头）
-      if (isOpenPalm(lm) && vz < -1.2 && canFire('push', 500)) {
+      if (isOpenPalm(lm) && vz < -0.9 && canFire('push', 500)) {
         if (sel) { actPush(sel); setGesture('前推'); }
         return;
       }
       // 6) 张开手掌靠近→吓一吓
-      if (isOpenPalm(lm) && speedH < 260 && Math.abs(vy) < 300) {
+      if (isOpenPalm(lm) && speedH < 220 && Math.abs(vy) < 300) {
         const t = nearestObj(pc.x, pc.y, 160);
-        if (t && canFire('scare', 1400)) { actScare(t); setGesture('张掌吓曄'); }
+        if (t && canFire('scare', 1400)) { actScare(t); setGesture('张掌吓唬'); }
+        else setGesture('张掌(保持靠近目标)');
       }
     }
 
@@ -944,13 +963,29 @@
       }
     }
 
+    // 将手部骨骼按真实画面位置叠加绘制到主舞台（营造手势“画中画”反馈）
+    function drawHandOnStage() {
+      if (!lastLandmarks || lastLandmarks.length === 0) return;
+      const CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+      sctx.save();
+      sctx.globalAlpha = 0.75; sctx.lineWidth = 5; sctx.lineCap = 'round';
+      for (const lm of lastLandmarks) {
+        const P = (i) => ({ x: (1 - lm[i].x) * CANVAS_W, y: lm[i].y * CANVAS_H });
+        sctx.strokeStyle = '#fbbf24';
+        for (const [a, b] of CONN) { const pa = P(a), pb = P(b); sctx.beginPath(); sctx.moveTo(pa.x, pa.y); sctx.lineTo(pb.x, pb.y); sctx.stroke(); }
+        sctx.fillStyle = '#f97316';
+        for (let i = 0; i < 21; i++) { const p = P(i); sctx.beginPath(); sctx.arc(p.x, p.y, 6, 0, Math.PI * 2); sctx.fill(); }
+      }
+      sctx.restore();
+    }
+
     // 初始化 MediaPipe Hands
     async function initHands() {
       if (handsReady) return true;
       if (typeof Hands === 'undefined') { setCamTip('❗手势库未能加载，请检查网络；可用鼠标拖拽发泄'); return false; }
       try {
         hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}` });
-        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.5 });
+        hands.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         hands.onResults((res) => {
           lastResultTime = performance.now();
           if (res.image) { camCanvas.width = res.image.width; camCanvas.height = res.image.height; }
@@ -984,6 +1019,22 @@
       previewLoopId = requestAnimationFrame(previewLoop);
     }
 
+    // 引擎健康检测（可见性感知）：窗口隐藏/后台会冻结 rAF，不能误判为模型加载失败
+    function scheduleEngineCheck() {
+      if (healthTimer) clearTimeout(healthTimer);
+      healthTimer = setTimeout(checkEngineHealth, 8000);
+    }
+    function checkEngineHealth() {
+      if (!state.camOn) return;
+      if (lastResultTime) { setEngineState('ok'); return; }
+      if (document.hidden || document.visibilityState !== 'visible') { scheduleEngineCheck(); return; }
+      setEngineState('failed');
+      setCamTip('⚠️ 手势模型未能加载（多为网络无法下载模型文件）\n请用鼠标拖拽物体发泄，或检查网络后刷新重试');
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && state.camOn && !lastResultTime) scheduleEngineCheck();
+    });
+
     async function startCamera() {
       state.camOn = true; updateCamBtn();
       camBox.classList.remove('hidden-preview'); setCamTip('');
@@ -1006,6 +1057,9 @@
         camVideo.srcObject = videoStream;
         await camVideo.play();
         const feed = async () => { try { await hands.send({ image: camVideo }); } catch (e) { /* 模型失败不阻断预览 */ } };
+        setEngineState('loading');
+        // 健康检测（可见性感知）：窗口隐藏/后台会冻结 rAF，导致 send 不被调用（非模型失败）
+        scheduleEngineCheck();
         if (typeof Camera !== 'undefined') {
           mpCamera = new Camera({ image: camVideo, onFrame: feed, width: 640, height: 480 });
           mpCamera.start();
@@ -1024,7 +1078,8 @@
     function stopCamera() {
       state.camOn = false; updateCamBtn();
       camBox.classList.add('hidden-preview');
-      handCursor.active = false;
+      handCursor.active = false; lastLandmarks = null; handsDetected = 0;
+      if (healthTimer) clearTimeout(healthTimer); setEngineState('idle'); setGesture('待机');
       if (previewLoopId) cancelAnimationFrame(previewLoopId);
       if (mpCamera) { try { mpCamera.stop(); } catch (e) {} mpCamera = null; }
       if (camLoopId) cancelAnimationFrame(camLoopId);
@@ -1060,6 +1115,7 @@
         sctx.beginPath(); sctx.moveTo(handCursor.x - 34, handCursor.y); sctx.lineTo(handCursor.x + 34, handCursor.y);
         sctx.moveTo(handCursor.x, handCursor.y - 34); sctx.lineTo(handCursor.x, handCursor.y + 34); sctx.stroke();
         sctx.restore();
+        drawHandOnStage(); // 主画面骨骼叠加（手势画中画）
       }
       sctx.restore();
       drawLighting();
@@ -1073,10 +1129,27 @@
     const uiTarget = document.getElementById('uiTarget');
     const uiBreak = document.getElementById('uiBreak');
     const uiGesture = document.getElementById('uiGesture');
+    const hudEngineEl = document.getElementById('hudEngine');
+    const hudHandsEl = document.getElementById('hudHands');
+    const hudPoseEl = document.getElementById('hudPose');
     const objSelect = document.getElementById('objSelect');
     const camTipEl = document.getElementById('camTip');
 
-    function setGesture(name) { uiGesture.textContent = '手势：' + name; }
+    function setGesture(name) {
+      uiGesture.textContent = '手势：' + name; curPose = name;
+      if (hudPoseEl) hudPoseEl.textContent = name;
+      if (hudHandsEl) hudHandsEl.textContent = handsDetected;
+    }
+    // 更新引擎状态（loading/ok/failed）到 HUD
+    function setEngineState(s) {
+      engineState = s;
+      if (!hudEngineEl) return;
+      const map = { idle: ['未启动', 'text-white/60'], loading: ['模型下载中…', 'text-amber-300'], ok: ['就绪', 'text-emerald-400'], failed: ['加载失败', 'text-rose-400'] };
+      const m = map[s] || map.idle;
+      hudEngineEl.textContent = m[0]; hudEngineEl.className = m[1];
+      // 引擎恢复就绪时，清除之前的“加载失败”类提示
+      if (s === 'ok' && camTipEl && camTipEl.textContent.includes('模型')) setCamTip('');
+    }
     function setCamTip(txt) { camTipEl.style.display = txt ? 'flex' : 'none'; camTipEl.textContent = txt; }
     function updateBreakUI() { uiBreak.textContent = state.breakCount; }
     function updateTargetUI() {
