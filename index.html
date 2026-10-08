@@ -989,6 +989,17 @@
       camBox.classList.remove('hidden-preview'); setCamTip('');
       Sound.init();
       previewLoop();
+      // 安全上下文检测：file:// 双击打开时浏览器会禁用摄像头
+      const insecure = !window.isSecureContext && location.protocol !== 'https:';
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCamTip('❌ 当前环境不支持摄像头。请勿直接双击打开，请用本地服务器：\npython -m http.server 8000\n然后访问 http://localhost:8000');
+        state.camOn = false; updateCamBtn();
+        spawnFloater(CANVAS_W / 2, 200, '请用 http://localhost 打开才能用摄像头', '#fde68a');
+        return;
+      }
+      if (insecure) {
+        setCamTip('⚠️ 非安全上下文，摄像头可能被拦截，请改用 http://localhost 或 https 访问');
+      }
       if (!(await initHands())) return;
       try {
         videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
@@ -1003,7 +1014,9 @@
           loop();
         }
       } catch (e) {
-        setCamTip('❌ 摄像头不可用，可用鼠标拖拽物体发泄');
+        const reason = e && e.name === 'NotAllowedError' ? '摄像头权限被拒绝，请在浏览器地址栏允许访问' :
+          (e && e.name === 'NotFoundError' ? '未检测到摄像头设备' : ('启动失败：' + (e && e.message ? e.message : e)));
+        setCamTip('❌ ' + reason + '\n仍可用鼠标拖拽物体发泄');
         state.camOn = false; updateCamBtn();
       }
     }
