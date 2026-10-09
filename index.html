@@ -459,7 +459,7 @@
           h: 6 + Math.random() * 14,
           color: m.color,
           life: 1, decay: 0.5 + Math.random() * 0.5,
-          shape: mat === 'glass' ? 'shard' : 'rect',
+          shape: mat === 'glass' ? 'shard' : (mat === 'metal' ? 'spark' : (mat === 'wood' ? 'splinter' : 'rect')),
         });
       }
       // 撞击尘土/闪光
@@ -502,6 +502,12 @@
         sctx.fillStyle = p.color;
         if (p.shape === 'dot') {
           sctx.beginPath(); sctx.arc(0, 0, p.w, 0, Math.PI * 2); sctx.fill();
+        } else if (p.shape === 'spark') {
+          sctx.fillStyle = '#fde68a'; sctx.shadowColor = '#fbbf24'; sctx.shadowBlur = 8;
+          sctx.beginPath(); sctx.arc(0, 0, p.w * 0.5, 0, Math.PI * 2); sctx.fill();
+        } else if (p.shape === 'splinter') {
+          sctx.fillStyle = p.color;
+          sctx.beginPath(); sctx.moveTo(-p.w, -2); sctx.lineTo(p.w, 0); sctx.lineTo(-p.w, 2); sctx.closePath(); sctx.fill();
         } else if (p.shape === 'shard') {
           sctx.beginPath();
           sctx.moveTo(0, -p.h); sctx.lineTo(p.w, p.h); sctx.lineTo(-p.w * 0.6, p.h * 0.4);
@@ -753,6 +759,17 @@
     // 绘制单个对象（包含状态动画）
     function drawObject(o, time) {
       if (o.state === 'broken') return;
+      // 地面阴影（随高度变淡变小）
+      const floorY = state.scene === 'office' ? 560 : 590;
+      const hAbove = Math.max(0, floorY - (o.y + o.h / 2));
+      const shScale = clamp(1 - hAbove / 500, 0.35, 1);
+      sctx.save();
+      sctx.globalAlpha = 0.22 * shScale;
+      sctx.fillStyle = '#000';
+      sctx.beginPath();
+      sctx.ellipse(o.x, floorY - 6, o.w / 2 * shScale, 12 * shScale, 0, 0, Math.PI * 2);
+      sctx.fill();
+      sctx.restore();
       sctx.save();
       // 震动/害怕/受伤时的位移与旋转
       let ox = 0, oy = 0, orot = o.rot;
@@ -770,6 +787,27 @@
         sctx.restore();
       }
       (SHAPES[o.shape] || (() => {}))(o);
+      // 损伤裂纹（hp 低于阈值时叠加）
+      if (o.hp != null && o.hp < 100 && o.kind !== 'person' && !o.base) drawCracks(o, ox, oy, orot);
+      sctx.restore();
+    }
+
+    // 根据剩余血量在对象上绘制随机裂纹（固定种子，避免每帧闪烁）
+    function drawCracks(o, ox, oy, orot) {
+      const dmg = 1 - clamp(o.hp / 100, 0, 1);
+      const crackN = Math.round(dmg * 6);
+      sctx.save();
+      sctx.translate(o.x + ox, o.y + oy); sctx.rotate(orot); sctx.translate(-o.x, -o.y);
+      sctx.strokeStyle = 'rgba(0,0,0,.55)'; sctx.lineWidth = 2; sctx.lineCap = 'round';
+      const seed = (o.id.charCodeAt(4) || 3) % 7;
+      for (let i = 0; i < crackN; i++) {
+        const sx = o.x - o.w / 2 + ((i * 37 + seed * 13) % o.w);
+        const sy = o.y - o.h / 2 + ((i * 53 + seed * 29) % o.h);
+        sctx.beginPath(); sctx.moveTo(sx, sy);
+        sctx.lineTo(sx + ((i % 2 ? 1 : -1) * 14), sy + 18);
+        sctx.lineTo(sx + ((i % 3 ? 1 : -1) * 10), sy + 30);
+        sctx.stroke();
+      }
       sctx.restore();
     }
 
@@ -817,6 +855,10 @@
       // 亮度不足时压暗
       const darkness = 1 - i;
       if (darkness > 0) { sctx.fillStyle = `rgba(6,8,20,${darkness * 0.82})`; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H); }
+      // 暗角 vignette（中心亮边缘暗，增强聚焦）
+      const vg = sctx.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.35, CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.85);
+      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.35)');
+      sctx.fillStyle = vg; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       sctx.restore();
     }
 
@@ -830,6 +872,8 @@
       if (o.state === 'broken') return;
       spawnDebris(o.x, o.y, o.mat, 1);
       Sound.breakSound(o.mat);
+      // 玻璃/金属破碎时触发短暂慢动作
+      if (o.mat === 'glass' || o.mat === 'metal') timeScale = 0.35;
       o.state = 'broken';
       if (o.id === state.selectedId) { state.selectedId = null; updateTargetUI(); }
       state.breakCount++;
@@ -972,6 +1016,23 @@
       else spawnFloater(o.x, o.y - o.h / 2, '❗', '#e2e8f0');
     }
 
+    // 绘制飞体拖尾（根据材质颜色渐隐的圆点）
+    function drawTrails() {
+      for (const o of state.objects) {
+        if (o.state !== 'fly' || !o.trail) continue;
+        const col = (MATERIALS[o.mat] || MATERIALS.plastic).color;
+        for (let i = 0; i < o.trail.length; i++) {
+          const t = o.trail[i];
+          sctx.save();
+          sctx.globalAlpha = (i / o.trail.length) * 0.4;
+          sctx.fillStyle = col;
+          const r = (i / o.trail.length) * (o.w / 4);
+          sctx.beginPath(); sctx.arc(t.x, t.y, Math.max(2, r), 0, Math.PI * 2); sctx.fill();
+          sctx.restore();
+        }
+      }
+    }
+
     // 逐帧更新对象物理与动画
     function updateObjects(dt) {
       const floorY = state.scene === 'office' ? 560 : 590;
@@ -988,10 +1049,13 @@
           o.x += o.vx * dt;
           o.y += o.vy * dt;
           o.rot += o.vr * dt;
+          // 记录拖尾轨迹（最多 12 个采样点）
+          (o.trail || (o.trail = [])).push({ x: o.x, y: o.y });
+          if (o.trail.length > 12) o.trail.shift();
           if (o.y > floorY - o.h / 2) {
             o.y = floorY - o.h / 2;
             if (Math.abs(o.vy) > 250 && MATERIALS[o.mat].breakable) { destroyObject(o); }
-            else { o.vy *= -0.4; o.vx *= 0.7; if (Math.abs(o.vy) < 60) { o.state = 'idle'; o.rot = 0; } }
+            else { o.vy *= -0.4; o.vx *= 0.7; if (Math.abs(o.vy) < 60) { o.state = 'idle'; o.rot = 0; o.trail = null; } }
           }
           if (o.x < -80 || o.x > CANVAS_W + 80) destroyObject(o);
         }
@@ -1356,8 +1420,12 @@
     // 【主渲染循环】
     // ============================================================
     let lastTime = performance.now();
+    let timeScale = 1;        // 全局时间缩放（慢动作用，1=正常）
     function frame(t) {
-      const dt = Math.min(0.05, (t - lastTime) / 1000); lastTime = t;
+      let dt = Math.min(0.05, (t - lastTime) / 1000); lastTime = t;
+      // 慢动作逐渐恢复至正常速度
+      timeScale += (1 - timeScale) * Math.min(1, dt * 3);
+      dt *= timeScale;
 
       updateObjects(dt);
       // 连击超时自然重置（2.5s 无命中）
@@ -1376,6 +1444,7 @@
       sctx.save();
       if (state.shake > 0.5) sctx.translate(rand(-state.shake, state.shake), rand(-state.shake, state.shake));
       drawBackground();
+      drawTrails();
       for (const o of state.objects) drawObject(o, t / 1000);
       drawParticles();
       // 手部光标
