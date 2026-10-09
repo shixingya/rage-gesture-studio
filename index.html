@@ -718,10 +718,12 @@
       return [
         makeObj({ name: '办公桌', shape: 'desk', x: 640, y: deskY + 60, w: 720, h: 150, mat: 'wood', base: true }),
         makeObj({ name: '电脑', shape: 'computer', x: 430, y: deskY - 60, w: 180, h: 150, mat: 'plastic' }),
+        makeObj({ name: '键盘', shape: 'keyboard', x: 430, y: deskY + 8, w: 150, h: 46, mat: 'plastic' }),
         makeObj({ name: '水杯', shape: 'cup', x: 760, y: deskY - 40, w: 70, h: 90, mat: 'glass' }),
         makeObj({ name: '文件夹', shape: 'folder', x: 900, y: deskY - 20, w: 110, h: 70, mat: 'plastic' }),
         makeObj({ name: '台灯', shape: 'lamp', x: 300, y: deskY - 90, w: 100, h: 170, mat: 'metal' }),
-        makeObj({ name: '老板小人', shape: 'boss', kind: 'person', x: 1080, y: deskY - 60, w: 130, h: 240, mat: 'skin' }),
+        makeObj({ name: '打印机', shape: 'printer', x: 1080, y: deskY - 10, w: 130, h: 90, mat: 'plastic' }),
+        makeObj({ name: '老板小人', shape: 'boss', kind: 'person', x: 1160, y: deskY - 60, w: 130, h: 240, mat: 'skin' }),
       ];
     }
 
@@ -729,10 +731,12 @@
     function buildRoom() {
       const floorY = 560;
       return [
-        makeObj({ name: '玻璃瓶', shape: 'bottle', x: 420, y: floorY - 90, w: 80, h: 180, mat: 'glass' }),
-        makeObj({ name: '盘子', shape: 'plate', x: 640, y: floorY - 30, w: 150, h: 60, mat: 'glass' }),
-        makeObj({ name: '木板', shape: 'plank', x: 860, y: floorY - 40, w: 240, h: 60, mat: 'wood' }),
-        makeObj({ name: '塑料桶', shape: 'bucket', x: 1050, y: floorY - 80, w: 130, h: 160, mat: 'plastic' }),
+        makeObj({ name: '玻璃瓶', shape: 'bottle', x: 360, y: floorY - 90, w: 80, h: 180, mat: 'glass' }),
+        makeObj({ name: '盘子', shape: 'plate', x: 560, y: floorY - 30, w: 150, h: 60, mat: 'glass' }),
+        makeObj({ name: '花瓶', shape: 'vase', x: 720, y: floorY - 70, w: 70, h: 140, mat: 'glass' }),
+        makeObj({ name: '木板', shape: 'plank', x: 900, y: floorY - 40, w: 240, h: 60, mat: 'wood' }),
+        makeObj({ name: '电视', shape: 'tv', x: 1080, y: floorY - 90, w: 200, h: 140, mat: 'metal' }),
+        makeObj({ name: '塑料桶', shape: 'bucket', x: 1210, y: floorY - 80, w: 130, h: 160, mat: 'plastic' }),
       ];
     }
 
@@ -870,6 +874,52 @@
         sctx.lineTo(o.w / 2 - 20, o.h / 2); sctx.lineTo(-o.w / 2 + 20, o.h / 2); sctx.closePath(); sctx.fill();
         sctx.strokeStyle = '#0ea5e9'; sctx.lineWidth = 8;
         sctx.beginPath(); sctx.arc(0, -o.h / 2, o.w / 2 - 6, Math.PI, 0); sctx.stroke(); // 提手
+        sctx.restore();
+      },
+      // 键盘
+      keyboard(o) {
+        const p = materialPalette(o.mat);
+        sctx.save(); sctx.translate(o.x, o.y);
+        sctx.fillStyle = p.tint || '#e2e8f0';
+        sctx.beginPath(); sctx.roundRect ? sctx.roundRect(-o.w/2, -o.h/2, o.w, o.h, 8) : sctx.rect(-o.w/2, -o.h/2, o.w, o.h); sctx.fill();
+        sctx.fillStyle = '#475569';
+        for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) sctx.fillRect(-o.w/2 + 8 + c * (o.w-16)/8, -o.h/2 + 8 + r * (o.h-16)/3, (o.w-16)/8 - 3, (o.h-16)/3 - 3);
+        sctx.restore();
+      },
+      // 打印机
+      printer(o) {
+        const p = materialPalette(o.mat);
+        sctx.save(); sctx.translate(o.x, o.y);
+        sctx.fillStyle = p.tint || '#94a3b8';
+        sctx.fillRect(-o.w/2, -o.h/4, o.w, o.h/2 + o.h/4);
+        sctx.fillStyle = '#e2e8f0'; sctx.fillRect(-o.w/2 + 10, -o.h/2, o.w - 20, o.h/4); // 进纸盘
+        sctx.fillStyle = '#334155'; sctx.fillRect(-o.w/2 + 8, o.h/4 - 8, 16, 8); // 出纸口
+        sctx.fillStyle = '#22c55e'; sctx.beginPath(); sctx.arc(o.w/2 - 14, 0, 5, 0, Math.PI*2); sctx.fill(); // 指示灯
+        sctx.restore();
+      },
+      // 电视
+      tv(o) {
+        const p = materialPalette(o.mat);
+        sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = '#1e293b';
+        sctx.beginPath(); sctx.roundRect ? sctx.roundRect(-o.w/2, -o.h/2, o.w, o.h, 10) : sctx.rect(-o.w/2, -o.h/2, o.w, o.h); sctx.fill();
+        const g = sctx.createLinearGradient(0, -o.h/2, 0, o.h/2);
+        g.addColorStop(0, '#38bdf8'); g.addColorStop(1, '#6366f1');
+        sctx.fillStyle = g; sctx.fillRect(-o.w/2 + 8, -o.h/2 + 8, o.w - 16, o.h - 16);
+        sctx.fillStyle = '#1e293b'; sctx.fillRect(-14, o.h/2, 28, 10); // 底座
+        sctx.restore();
+      },
+      // 花瓶
+      vase(o) {
+        const p = materialPalette(o.mat);
+        sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = p.tint || '#f0abfc';
+        sctx.beginPath();
+        sctx.moveTo(-o.w/3, -o.h/2); sctx.quadraticCurveTo(-o.w/2 - 6, 0, -o.w/3, o.h/2);
+        sctx.lineTo(o.w/3, o.h/2); sctx.quadraticCurveTo(o.w/2 + 6, 0, o.w/3, -o.h/2); sctx.closePath(); sctx.fill();
+        sctx.fillStyle = '#22c55e'; // 花枝
+        sctx.beginPath(); sctx.moveTo(0, -o.h/2); sctx.quadraticCurveTo(6, -o.h/2 - 24, 0, -o.h/2 - 40); sctx.lineWidth = 4; sctx.strokeStyle = '#22c55e'; sctx.stroke();
+        sctx.fillStyle = '#f472b6'; sctx.beginPath(); sctx.arc(0, -o.h/2 - 44, 10, 0, Math.PI*2); sctx.fill(); // 花
         sctx.restore();
       },
       // 老板小人（卡通，无血腥）
@@ -1336,6 +1386,9 @@
       { shape: 'bucket', w: 100, h: 130, mat: 'plastic' },
       { shape: 'plank', w: 180, h: 50, mat: 'wood' },
       { shape: 'folder', w: 90, h: 60, mat: 'metal' },
+      { shape: 'keyboard', w: 140, h: 44, mat: 'plastic' },
+      { shape: 'vase', w: 64, h: 120, mat: 'glass' },
+      { shape: 'printer', w: 120, h: 84, mat: 'plastic' },
     ];
     const challengeBarEl = document.getElementById('challengeBar');
     const challengeTimeEl = document.getElementById('challengeTime');
@@ -1982,6 +2035,8 @@
     // 按 D 键切换调试面板
     window.addEventListener('keydown', (e) => {
       if (e.key === 'd' || e.key === 'D') { dbgVisible = !dbgVisible; return; }
+      // Q 快速切换场景
+      if (e.key === 'q' || e.key === 'Q') { const next = state.scene === 'office' ? 'room' : 'office'; setScene(next); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
       // 键盘 1-6 模拟手势
       const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
       if (simMap[e.key]) { simGesture(simMap[e.key]); }
