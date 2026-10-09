@@ -763,7 +763,7 @@
         kind: 'item', mat: 'plastic',
         x: 0, y: 0, w: 80, h: 80, rot: 0,
         vx: 0, vy: 0, vr: 0,
-        state: 'idle', anim: 0, face: 'calm', hp: 100,
+        state: 'idle', anim: 0, face: 'calm', hp: 100, flash: 0, punch: 0,
         removable: true, // 是否可被彻底打碎移除
       }, o);
       obj.homeX = obj.x; obj.homeY = obj.y; // 初始位置（重生用）
@@ -1054,6 +1054,7 @@
       if (o.state === 'hurt') { orot += -0.35 * o.anim; oy = -6 * o.anim; }
       sctx.translate(o.x + ox, o.y + oy);
       sctx.rotate(orot);
+      if (o.punch > 0) { const s = 1 + 0.1 * o.punch; sctx.scale(s, s); }
       sctx.translate(-o.x, -o.y);
       // 选中高亮光环
       if (o.id === state.selectedId && !o.base) {
@@ -1065,6 +1066,14 @@
       (SHAPES[o.shape] || (() => {}))(o);
       // 损伤裂纹（hp 低于阈值时叠加）
       if (o.hp != null && o.hp < 100 && o.kind !== 'person' && !o.base) drawCracks(o, ox, oy, orot);
+      // 受击白色描边闪光（game feel，随 flash 衰减）
+      if (o.flash > 0) {
+        sctx.save(); sctx.globalAlpha = o.flash * 0.9; sctx.strokeStyle = '#fff'; sctx.lineWidth = 5;
+        sctx.beginPath();
+        if (sctx.roundRect) sctx.roundRect(o.x - o.w / 2 - 4, o.y - o.h / 2 - 4, o.w + 8, o.h + 8, 10);
+        else sctx.rect(o.x - o.w / 2 - 4, o.y - o.h / 2 - 4, o.w + 8, o.h + 8);
+        sctx.stroke(); sctx.restore();
+      }
       sctx.restore();
     }
 
@@ -1318,6 +1327,7 @@
     // 小人受伤反馈（不破坏，仅后仰 + 痛表情）
     function hurtPerson(o, force) {
       o.face = 'hurt'; setAnim(o, 'hurt');
+      o.flash = 1; o.punch = 1;
       Sound.cry();
       spawnFloater(o.x, o.y - o.h / 2, ['哎呦!', '饶命!', '啊啊!', '😵'][Math.floor(Math.random() * 4)], '#fca5a5');
       state.shake = Math.max(state.shake, 4 + force * 8);
@@ -1355,6 +1365,7 @@
       if (o.kind === 'person') { hurtPerson(o, force); return; }
       spawnDebris(o.x, o.y - o.h * 0.2, o.mat, force * 0.25);
       setAnim(o, 'shake');
+      o.flash = 1; o.punch = 1;
       o.hp = (o.hp == null ? 100 : o.hp) - force * 55;
       if (o.hp <= 0 && MATERIALS[o.mat].breakable) destroyObject(o);
     }
@@ -1376,6 +1387,7 @@
     // 手掌向下猛拍：砸目标
     function actSlap(o) {
       if (!o || o.state === 'broken') return;
+      o.flash = 1; o.punch = 1;
       state.shake = Math.max(state.shake, 18);
       addPulse(o.x, o.y, '#ef4444');
       Sound.impact(1);
@@ -1388,6 +1400,7 @@
     // 手掌向前推：推飞目标
     function actPush(o) {
       if (!o || o.state === 'broken') return;
+      o.flash = 1; o.punch = 1;
       addPulse(o.x, o.y, '#38bdf8');
       Sound.whoosh();
       if (o.kind === 'person') { hurtPerson(o, 0.6); o.vx = 300; setAnim(o, 'hurt'); return; }
@@ -1475,6 +1488,9 @@
       const floorY = state.scene === 'office' ? 560 : 590;
       for (const o of state.objects) {
         if (o.state === 'broken') continue;
+        // 受击闪光/缩放脉冲逐帧衰减
+        if (o.flash > 0) o.flash = Math.max(0, o.flash - dt * 4);
+        if (o.punch > 0) o.punch = Math.max(0, o.punch - dt * 6);
         // 动画衰减
         if (o.state === 'shake' || o.state === 'hurt' || o.state === 'fear') {
           o.anim -= dt * 2.2;
