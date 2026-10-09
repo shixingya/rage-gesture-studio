@@ -338,6 +338,7 @@
       selectedId: null,       // 当前选中的对象 id
       particles: [],          // 粒子/碎片
       floaters: [],           // 伤害数字/表情气泡
+      pulses: [],             // 手势触发脉冲环
       shake: 0,               // 屏幕震动强度（每帧衰减）
       transition: 0,          // 场景切换过渡黑幕强度 0~1
       ambient: [],            // 环境漂浮粒子（尘埃/雪花）
@@ -601,6 +602,23 @@
     // 飘字/表情气泡
     function spawnFloater(x, y, text, color) {
       state.floaters.push({ x, y, text, color: color || '#fff', life: 1 });
+    }
+
+    // 手势触发脉冲环（在作用点扩散一圈后消失）
+    function addPulse(x, y, color) {
+      state.pulses.push({ x, y, r: 8, max: 60 + Math.random() * 20, color: color || '#fbbf24', life: 1 });
+    }
+    function updatePulses(dt) {
+      for (const p of state.pulses) { p.r += (p.max - p.r) * Math.min(1, dt * 8); p.life -= dt * 2.2; }
+      state.pulses = state.pulses.filter(p => p.life > 0);
+    }
+    function drawPulses() {
+      for (const p of state.pulses) {
+        sctx.save(); sctx.globalAlpha = Math.max(0, p.life) * 0.7;
+        sctx.strokeStyle = p.color; sctx.lineWidth = 4; sctx.setLineDash([8, 6]);
+        sctx.beginPath(); sctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); sctx.stroke();
+        sctx.restore();
+      }
     }
 
     // 每帧更新粒子物理
@@ -1157,6 +1175,7 @@
     function actHit(o, force) {
       if (!o || o.state === 'broken') return;
       state.shake = Math.max(state.shake, 6 + force * 14);
+      addPulse(o.x, o.y, '#f97316');
       Sound.impact(force);
       bumpCombo(); addRage(5 + force * 8);
       addScore(5, o.x, o.y - o.h / 2);
@@ -1185,6 +1204,7 @@
     function actSlap(o) {
       if (!o || o.state === 'broken') return;
       state.shake = Math.max(state.shake, 18);
+      addPulse(o.x, o.y, '#ef4444');
       Sound.impact(1);
       if (o.kind === 'person') { o.face = 'hurt'; setAnim(o, 'shake'); Sound.cry(); spawnFloater(o.x, o.y - o.h / 2, '🤚 抱头!', '#fca5a5'); return; }
       // 物体弹飞
@@ -1195,6 +1215,7 @@
     // 手掌向前推：推飞目标
     function actPush(o) {
       if (!o || o.state === 'broken') return;
+      addPulse(o.x, o.y, '#38bdf8');
       Sound.whoosh();
       if (o.kind === 'person') { hurtPerson(o, 0.6); o.vx = 300; setAnim(o, 'hurt'); return; }
       o.state = 'fly'; o.vx = 600; o.vy = -200; o.vr = 4;
@@ -1236,6 +1257,44 @@
           sctx.restore();
         }
       }
+    }
+
+    // 选中对象信息标签：名称/材质/血条（浮于物体上方）
+    function drawSelectedInfo() {
+      const o = selectedObj();
+      if (!o || o.state === 'broken' || o.base) return;
+      const bx = o.x, by = o.y - o.h / 2 - 44;
+      sctx.save();
+      sctx.font = 'bold 18px "Comic Sans MS", sans-serif'; sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
+      const label = o.name + '・' + (MATERIALS[o.mat] ? MATERIALS[o.mat].label : o.mat);
+      const w = Math.max(96, sctx.measureText(label).width + 24);
+      sctx.fillStyle = 'rgba(0,0,0,.62)';
+      sctx.beginPath(); sctx.roundRect ? sctx.roundRect(bx - w / 2, by - 16, w, 32, 8) : sctx.rect(bx - w / 2, by - 16, w, 32); sctx.fill();
+      sctx.fillStyle = '#fbbf24'; sctx.fillText(label, bx, by - 2);
+      // 血条（仅可碎物）
+      if (o.hp != null && o.kind !== 'person' && MATERIALS[o.mat].breakable) {
+        const hpw = w - 24, ratio = clamp(o.hp / 100, 0, 1);
+        sctx.fillStyle = 'rgba(255,255,255,.25)'; sctx.fillRect(bx - hpw / 2, by + 10, hpw, 5);
+        sctx.fillStyle = ratio > 0.5 ? '#4ade80' : (ratio > 0.25 ? '#fbbf24' : '#ef4444');
+        sctx.fillRect(bx - hpw / 2, by + 10, hpw * ratio, 5);
+      }
+      sctx.restore();
+    }
+
+    // 连击大字幕（屏幕中部半透明）
+    function drawComboOverlay(time) {
+      if (state.combo < 3) return;
+      const a = clamp((state.comboTime + 2500 - performance.now()) / 2500, 0, 1);
+      sctx.save();
+      sctx.globalAlpha = 0.5 * a;
+      sctx.font = '900 ' + (70 + state.combo * 1.5) + 'px "Comic Sans MS", sans-serif';
+      sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
+      sctx.lineWidth = 8; sctx.strokeStyle = 'rgba(220,38,38,.85)';
+      sctx.fillStyle = 'rgba(251,146,60,.95)';
+      const txt = 'x' + state.combo;
+      const wob = Math.sin(time * 8) * 4;
+      sctx.strokeText(txt, CANVAS_W / 2, 300 + wob); sctx.fillText(txt, CANVAS_W / 2, 300 + wob);
+      sctx.restore();
     }
 
     // 逐帧更新对象物理与动画
@@ -1729,6 +1788,7 @@
         grabbed.obj.x = grabbed.lastX + grabbed.offX; grabbed.obj.y = grabbed.lastY + grabbed.offY;
       }
       updateParticles(dt);
+      updatePulses(dt);
       state.shake = Math.max(0, state.shake - dt * 60);
       state.transition = Math.max(0, state.transition - dt * 2.4); // 黑幕渐退
 
@@ -1740,7 +1800,10 @@
       updateDrawAmbient(dt);
       drawTrails();
       for (const o of state.objects) drawObject(o, t / 1000);
+      drawPulses();
       drawParticles();
+      drawSelectedInfo();
+      drawComboOverlay(t / 1000);
       // 手部光标
       if (handCursor.active) {
         sctx.save(); sctx.strokeStyle = '#f97316'; sctx.lineWidth = 3;
