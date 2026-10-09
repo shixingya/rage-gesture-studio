@@ -23,7 +23,7 @@
       -webkit-user-select: none; user-select: none;
     }
     /* 主舞台画布：按比例自适应铺满可用区域 */
-    #stage { display: block; width: 100%; height: 100%; }
+    #stage { display: block; width: 100%; height: 100%; touch-action: none; }
     .stage-wrap { position: relative; }
 
     /* 右下角摄像头预览窗口（半透明） */
@@ -60,6 +60,10 @@
 </head>
 
 <body class="text-white">
+  <!-- 小屏提示（仅窄于 md 时显示）：本应用为桌面/大屏设计 -->
+  <div id="smallScreenHint" class="md:hidden fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-black text-center text-xs py-1.5 px-2">
+    📱 本应用为电脑大屏优化；建议横屏或使用电脑。触屏可直接拖拽/双击物体发泄。
+  </div>
   <div class="flex h-screen w-screen">
 
     <!-- ================= 主舞台区域 ================= -->
@@ -889,7 +893,8 @@
     // 绘制单个对象（包含状态动画）
     function drawObject(o, time) {
       if (o.state === 'broken') return;
-      // 地面阴影（随高度变淡变小）
+      // 地面阴影（随高度变淡变小；低性能降级时跳过）
+      if (!lowPerf) {
       const floorY = state.scene === 'office' ? 560 : 590;
       const hAbove = Math.max(0, floorY - (o.y + o.h / 2));
       const shScale = clamp(1 - hAbove / 500, 0.35, 1);
@@ -900,6 +905,7 @@
       sctx.ellipse(o.x, floorY - 6, o.w / 2 * shScale, 12 * shScale, 0, 0, Math.PI * 2);
       sctx.fill();
       sctx.restore();
+      }
       sctx.save();
       // 震动/害怕/受伤时的位移与旋转
       let ox = 0, oy = 0, orot = o.rot;
@@ -1559,6 +1565,9 @@
       sctx.fillStyle = '#fff'; sctx.fillText('手: ' + dbg.hands + '   姿势: ' + curPose, x + 12, y + 58);
       sctx.fillText('指伸: ' + dbg.ext + '  捏距: ' + dbg.pinch, x + 12, y + 82);
       sctx.fillText('掌心: ' + dbg.palm + '  目标: ' + dbg.target, x + 12, y + 106);
+      //  FPS 与性能提示（面板右上角）
+      sctx.fillStyle = curFPS >= 50 ? '#4ade80' : (curFPS >= 30 ? '#fbbf24' : '#f87171');
+      sctx.fillText(curFPS + ' FPS' + (lowPerf ? ' [降级]' : ''), x + 220, y + 34);
       sctx.restore();
     }
 
@@ -1689,7 +1698,20 @@
     // ============================================================
     let lastTime = performance.now();
     let timeScale = 1;        // 全局时间缩放（慢动作用，1=正常）
+    // —— FPS 统计与自适应降级 ——
+    let fpsFrames = 0, fpsLast = performance.now(), curFPS = 60, lowPerf = false;
+    function updateFPS(now) {
+      fpsFrames++;
+      if (now - fpsLast >= 1000) {
+        curFPS = Math.round(fpsFrames * 1000 / (now - fpsLast));
+        fpsFrames = 0; fpsLast = now;
+        // 连续低帧率则降级：关环境粒子与阴影
+        if (curFPS < 30) { if (!lowPerf) { lowPerf = true; state.ambient.length = 0; } }
+        else if (curFPS > 45 && lowPerf) { lowPerf = false; initAmbient(); }
+      }
+    }
     function frame(t) {
+      updateFPS(t);
       let dt = Math.min(0.05, (t - lastTime) / 1000); lastTime = t;
       // 慢动作逐渐恢复至正常速度
       timeScale += (1 - timeScale) * Math.min(1, dt * 3);
@@ -1800,34 +1822,42 @@
       if (o) highlightMat(o.mat);
     }
 
-    // 画布鼠标交互（选择 + 拖拽甩出的兵底方案）
+    // 画布指针交互（鼠标 + 触屏统一：选择 + 拖拽甩出 + 双击/双 tap 击打）
     function canvasPos(e) {
       const r = stage.getBoundingClientRect();
       return { x: (e.clientX - r.left) / r.width * CANVAS_W, y: (e.clientY - r.top) / r.height * CANVAS_H };
     }
-    stage.addEventListener('mousedown', (e) => {
+    let lastTap = 0, lastTapPos = null;
+    stage.addEventListener('pointerdown', (e) => {
       Sound.init(); Sound.resume();
       const p = canvasPos(e); const o = pickObject(p.x, p.y);
+      // 双 tap 击打（触屏无 dblclick）：300ms 内同位置二次点击
+      const now = performance.now();
+      if (o && now - lastTap < 300 && lastTapPos && Math.hypot(p.x - lastTapPos.x, p.y - lastTapPos.y) < 40) {
+        selectObject(o.id); actHit(o, 0.9); lastTap = 0; return;
+      }
+      lastTap = now; lastTapPos = p;
       if (o) {
         selectObject(o.id); actGrab(o);
         grabbed = { obj: o, offX: o.x - p.x, offY: o.y - p.y, lastX: p.x, lastY: p.y, vx: 0, vy: 0 };
+        if (stage.setPointerCapture) { try { stage.setPointerCapture(e.pointerId); } catch (_) {} }
       } else { state.selectedId = null; updateTargetUI(); }
     });
-    window.addEventListener('mousemove', (e) => {
+    window.addEventListener('pointermove', (e) => {
       if (!grabbed || handCursor.active) return;
       const p = canvasPos(e);
       grabbed.vx = (p.x - grabbed.lastX); grabbed.vy = (p.y - grabbed.lastY);
       grabbed.lastX = p.x; grabbed.lastY = p.y;
       grabbed.obj.x = p.x + grabbed.offX; grabbed.obj.y = p.y + grabbed.offY;
     });
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('pointerup', () => {
       if (grabbed && !handCursor.active) {
         const g = grabbed; grabbed = null;
         if (Math.hypot(g.vx, g.vy) > 14) actThrow(g.obj, clamp(g.vx * 22, -1200, 1200), clamp(g.vy * 22 - 150, -1200, 1200));
         else { g.obj.state = 'idle'; g.obj.rot = 0; }
       }
     });
-    // 双击快速击打
+    // 双击快速击打（桌面端）
     stage.addEventListener('dblclick', (e) => {
       const p = canvasPos(e); const o = pickObject(p.x, p.y);
       if (o) { selectObject(o.id); actHit(o, 0.9); }
@@ -1995,6 +2025,11 @@
     })();
 
     updateAchCountUI();   // 初始成就计数
+    // 小屏提示条 6 秒后自动淡出
+    (function autoHideHint() {
+      const h = document.getElementById('smallScreenHint');
+      if (h) setTimeout(() => { h.style.transition = 'opacity .6s'; h.style.opacity = '0'; setTimeout(() => h.style.display = 'none', 600); }, 6000);
+    })();
     window.__rage = state; // 调试/E2E 可断言入口
     requestAnimationFrame(frame);
     // ===== 应用启动完成 =====
