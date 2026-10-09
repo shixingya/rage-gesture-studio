@@ -194,6 +194,10 @@
           <span class="text-xs text-white/60">音量：<span id="volVal">90</span></span>
           <input id="volSlider" type="range" min="0" max="100" value="90" />
         </label>
+        <label class="flex items-center justify-between">
+          <span class="text-xs text-white/60">背景氛围乐</span>
+          <input id="musicToggle" type="checkbox" class="w-5 h-5 accent-orange-500" />
+        </label>
       </section>
 
       <!-- 玩法设置 -->
@@ -334,6 +338,7 @@
       light: { intensity: 70, warm: true, ambient: true },
       muted: false,
       volume: 0.9,            // 主音量 0~1
+      musicOn: false,         // 背景氛围乐开关
       camOn: false,
       breakCount: 0,
       lastAction: 0,          // 防抖：上次触发动作的时间戳
@@ -505,7 +510,50 @@
       // 成就解锁（上行双音）
       function unlock() { tone(660, 0.14, 'triangle', 0.22, 880); setTimeout(() => tone(880, 0.22, 'triangle', 0.22, 1320), 120); }
 
-      return { init, resume, setMuted, setVolume, applyGain, impact, breakSound, whoosh, cry, grab, click, roar, unlock };
+      // —— 生成式背景氛围乐（无外部素材，纯振荡器调度）——
+      let musicTimer = null, musicStep = 0, nextNoteTime = 0, musicPlaying = false;
+      const BASS = [0, 0, 7, 7, 5, 5, 3, 3];          // 以 A2 为基准的半音序号（小调五声）
+      const ARP  = [12, 15, 19, 22, 19, 15];            // 分解和弦
+      function semiToFreq(s) { return 110 * Math.pow(2, s / 12); }
+      function scheduleNote(time, semi, dur, type, vol) {
+        if (!ctx) return;
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.type = type; o.frequency.setValueAtTime(semiToFreq(semi), time);
+        g.gain.setValueAtTime(0.0001, time);
+        g.gain.linearRampToValueAtTime(vol, time + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+        o.connect(g); g.connect(masterGain);
+        o.start(time); o.stop(time + dur + 0.02);
+      }
+      function musicTick() {
+        if (!ctx) return;
+        const ahead = 0.12, tempo = 0.28;
+        while (nextNoteTime < ctx.currentTime + ahead) {
+          scheduleNote(nextNoteTime, BASS[musicStep % BASS.length], 0.5, 'triangle', 0.10);
+          if (musicStep % 2 === 0) scheduleNote(nextNoteTime, ARP[(musicStep / 2) % ARP.length], 0.32, 'sine', 0.06);
+          nextNoteTime += tempo; musicStep++;
+        }
+      }
+      function startMusic() {
+        init(); if (!ctx || musicPlaying) return; resume();
+        musicPlaying = true; nextNoteTime = ctx.currentTime + 0.06; musicStep = 0;
+        musicTimer = setInterval(musicTick, 60);
+      }
+      function stopMusic() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } musicPlaying = false; }
+      function isMusicPlaying() { return musicPlaying; }
+      // 连击音阶：连击越高，音高递升（满足感升级）
+      function comboTier(combo) {
+        const step = Math.min(combo, 16);
+        tone(440 * Math.pow(2, step / 12), 0.1, 'square', 0.08, 660 * Math.pow(2, step / 12));
+      }
+      // 狂暴临时驱动乐句（快速上行）
+      function battle() {
+        if (!ready) return; resume();
+        const seq = [12, 14, 15, 17, 19, 17, 15, 14];
+        seq.forEach((s, i) => setTimeout(() => tone(110 * Math.pow(2, s / 12), 0.18, 'sawtooth', 0.12), i * 110));
+      }
+
+      return { init, resume, setMuted, setVolume, applyGain, impact, breakSound, whoosh, cry, grab, click, roar, unlock, startMusic, stopMusic, isMusicPlaying, comboTier, battle };
     })();
 
     // ============================================================
@@ -981,6 +1029,7 @@
       state.comboTime = now;
       if (state.combo > state.bestCombo) state.bestCombo = state.combo;
       updateComboUI();
+      if (state.combo > 1) Sound.comboTier(state.combo);
       if (state.combo > 1 && state.combo % 5 === 0) spawnFloater(CANVAS_W / 2, 240, '🔥 ' + state.combo + ' 连击!', '#fb923c');
     }
 
@@ -1008,6 +1057,7 @@
       state._berserkSeen = true;
       state.berserkUntil = performance.now() + 3500;
       Sound.roar();
+      Sound.battle();
       state.shake = 42;
       spawnFloater(CANVAS_W / 2, 180, '💥 狂暴模式!! 💥', '#ef4444');
       state.objects.forEach(o => {
@@ -1760,7 +1810,7 @@
     document.getElementById('resetCancelBtn').addEventListener('click', () => { resetMask.classList.add('hidden'); resetMask.classList.remove('flex'); });
     document.getElementById('resetOkBtn').addEventListener('click', () => { doReset(); resetMask.classList.add('hidden'); resetMask.classList.remove('flex'); });
     // 首次全局点击解锁音频
-    window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); }, { once: false });
+    window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); if (state.musicOn && !Sound.isMusicPlaying()) Sound.startMusic(); }, { once: false });
     // 按 D 键切换调试面板
     window.addEventListener('keydown', (e) => {
       if (e.key === 'd' || e.key === 'D') { dbgVisible = !dbgVisible; return; }
@@ -1788,6 +1838,11 @@
     const volSlider = document.getElementById('volSlider');
     const volVal = document.getElementById('volVal');
     volSlider.addEventListener('input', () => { Sound.init(); const v = volSlider.value/100; Sound.setVolume(v); volVal.textContent = volSlider.value; Store.save({ volume: v }); });
+    // 背景氛围乐开关
+    document.getElementById('musicToggle').addEventListener('change', (e) => {
+      state.musicOn = e.target.checked; Store.save({ musicOn: state.musicOn });
+      if (state.musicOn) { Sound.init(); Sound.resume(); Sound.startMusic(); } else Sound.stopMusic();
+    });
     // 灵敏度滑块
     const sensSlider = document.getElementById('sensSlider');
     const sensVal = document.getElementById('sensVal');
@@ -1839,6 +1894,7 @@
       if (typeof s.bodyOnStage === 'boolean') { state.bodyOnStage = s.bodyOnStage; document.getElementById('bodyStageToggle').checked = s.bodyOnStage; }
       if (typeof s.totalBreak === 'number') state.totalBreak = s.totalBreak;
       if (typeof s.bestCombo === 'number') state.bestCombo = s.bestCombo;
+      if (typeof s.musicOn === 'boolean') { state.musicOn = s.musicOn; document.getElementById('musicToggle').checked = s.musicOn; /* 音乐需用户手势启动，此处仅同步开关态，不自动播放 */ }
       if (Array.isArray(s.unlockedAch)) state.unlockedAch = s.unlockedAch.slice();
       if (typeof s.challengeBest === 'number') state.challenge.best = s.challengeBest;
       if (s.light) {
