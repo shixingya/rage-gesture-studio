@@ -10,6 +10,7 @@
 
   <!-- MediaPipe Hands + Camera Utils：手势识别核心，通过 CDN 加载 -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js" crossorigin="anonymous"></script>
 
   <style>
@@ -818,6 +819,9 @@
     // 【手势识别模块】MediaPipe Hands → 手势分类 → 分发动作
     // ============================================================
     let hands = null;         // MediaPipe Hands 实例
+    let pose = null;          // MediaPipe Pose 实例（人体骨架）
+    let poseReady = false;    // Pose 是否已初始化
+    let lastPoseLandmarks = null; // 最近一帧人体 33 点 landmarks
     let mpCamera = null;      // Camera 工具循环
     let videoStream = null;
     let handsReady = false;
@@ -956,15 +960,41 @@
       return best;
     }
 
-    // 在预览窗口绘制手部骨架
-    function drawLandmarks(handsArr) {
-      const W = camCanvas.width, H = camCanvas.height;
+    // 在预览窗口绘制手部骨架（21 点）
+    function drawHandSkeleton(ctx, W, H, handsArr) {
       const CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
       for (const lm of (handsArr || [])) {
-        cctx.strokeStyle = '#f97316'; cctx.lineWidth = 2;
-        for (const [a, b] of CONN) { cctx.beginPath(); cctx.moveTo(lm[a].x * W, lm[a].y * H); cctx.lineTo(lm[b].x * W, lm[b].y * H); cctx.stroke(); }
-        cctx.fillStyle = '#fbbf24';
-        for (const p of lm) { cctx.beginPath(); cctx.arc(p.x * W, p.y * H, 3, 0, Math.PI * 2); cctx.fill(); }
+        ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2;
+        for (const [a, b] of CONN) { ctx.beginPath(); ctx.moveTo(lm[a].x * W, lm[a].y * H); ctx.lineTo(lm[b].x * W, lm[b].y * H); ctx.stroke(); }
+        ctx.fillStyle = '#fbbf24';
+        for (const p of lm) { ctx.beginPath(); ctx.arc(p.x * W, p.y * H, 3, 0, Math.PI * 2); ctx.fill(); }
+      }
+    }
+
+    // 在预览窗口绘制人体骨架（MediaPipe Pose 33 点，随人移动而动）
+    function drawPoseSkeleton(ctx, W, H, lm) {
+      if (!lm || !lm.length) return;
+      // 躯干/四肢/头部主要关节连线（COCO 风格）
+      const CONN = [
+        [0,1],[0,2],[1,2],[1,3],[2,4],           // 头部
+        [0,5],[0,6],[5,6],                        // 肩线
+        [5,7],[7,9],[6,8],[8,10],                 // 手臂
+        [9,10],                                   // 手腕连线
+        [5,11],[6,12],[11,12],                    // 躯干
+        [11,13],[13,15],[12,14],[14,16],          // 腿
+        [15,17],[15,19],[17,19],[16,18],[16,20],[18,20], // 脚
+      ];
+      const vis = (i) => lm[i] && (lm[i].visibility === undefined || lm[i].visibility > 0.5);
+      // 连线
+      ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.strokeStyle = '#22d3ee';
+      for (const [a, b] of CONN) {
+        if (vis(a) && vis(b)) { ctx.beginPath(); ctx.moveTo(lm[a].x * W, lm[a].y * H); ctx.lineTo(lm[b].x * W, lm[b].y * H); ctx.stroke(); }
+      }
+      // 关节点
+      for (let i = 0; i < lm.length; i++) {
+        if (!vis(i)) continue;
+        ctx.fillStyle = i <= 10 ? '#f472b6' : '#22d3ee';
+        ctx.beginPath(); ctx.arc(lm[i].x * W, lm[i].y * H, i === 0 ? 6 : 4, 0, Math.PI * 2); ctx.fill();
       }
     }
 
@@ -1012,32 +1042,42 @@
         hands.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         hands.onResults((res) => {
           lastResultTime = performance.now(); resultsCount++;
-          if (res.image) { camCanvas.width = res.image.width; camCanvas.height = res.image.height; }
-          cctx.save();
-          cctx.clearRect(0, 0, camCanvas.width, camCanvas.height);
-          cctx.translate(camCanvas.width, 0); cctx.scale(-1, 1); // 镜像
-          cctx.drawImage(res.image, 0, 0, camCanvas.width, camCanvas.height);
-          drawLandmarks(res.multiHandLandmarks);
-          cctx.restore();
           analyzeHands(res);
         });
         handsReady = true; return true;
       } catch (e) { setCamTip('❗手势初始化失败'); return false; }
     }
 
+    // 初始化 MediaPipe Pose（人体骨架），失败不影响手势/预览
+    async function initPose() {
+      if (poseReady) return true;
+      if (typeof Pose === 'undefined') return false;
+      try {
+        pose = new Pose({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/${f}` });
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        pose.onResults((res) => {
+          lastResultTime = performance.now();
+          lastPoseLandmarks = res.poseLandmarks || null;
+        });
+        poseReady = true; return true;
+      } catch (e) { poseReady = false; return false; }
+    }
+
     let camLoopId = 0;
     let lastResultTime = 0;   // 最近一次收到手势结果的时间戳
     let previewLoopId = 0;
 
-    // 独立预览绘制循环：即使手势模型不可用（未产生结果），也让镜像画面正常显示，避免黑屏
+    // 独立预览绘制循环（画中画）：每帧重绘 镜像视频 + 人体骨架 + 手部骨架，骨架随人移动而实时变化
     function previewLoop() {
       if (!state.camOn) return;
-      if (performance.now() - lastResultTime > 250 && camVideo.readyState >= 2) {
-        camCanvas.width = camVideo.videoWidth || 640;
-        camCanvas.height = camVideo.videoHeight || 480;
+      if (camVideo.readyState >= 2) {
+        const W = camVideo.videoWidth || 640, H = camVideo.videoHeight || 480;
+        if (camCanvas.width !== W) { camCanvas.width = W; camCanvas.height = H; }
         cctx.save();
-        cctx.translate(camCanvas.width, 0); cctx.scale(-1, 1);
-        cctx.drawImage(camVideo, 0, 0, camCanvas.width, camCanvas.height);
+        cctx.translate(W, 0); cctx.scale(-1, 1); // 镜像，与视频对齐
+        cctx.drawImage(camVideo, 0, 0, W, H);
+        drawPoseSkeleton(cctx, W, H, lastPoseLandmarks);
+        drawHandSkeleton(cctx, W, H, lastLandmarks);
         cctx.restore();
       }
       previewLoopId = requestAnimationFrame(previewLoop);
@@ -1076,21 +1116,25 @@
         setCamTip('⚠️ 非安全上下文，摄像头可能被拦截，请改用 http://localhost 或 https 访问');
       }
       if (!(await initHands())) return;
+      await initPose();
+      const feed = async () => {
+        try { await hands.send({ image: camVideo }); } catch (e) { /* 模型失败不阻断预览 */ }
+        try { if (pose) await pose.send({ image: camVideo }); } catch (e) { /* 同上 */ }
+      };
+      setEngineState('loading');
+      // 健康检测（可见性感知）
+      scheduleEngineCheck();
       try {
         videoStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
         camVideo.srcObject = videoStream;
         await camVideo.play();
-        const feed = async () => { try { await hands.send({ image: camVideo }); } catch (e) { /* 模型失败不阻断预览 */ } };
-        setEngineState('loading');
-        // 健康检测（可见性感知）：窗口隐藏/后台会冻结 rAF，导致 send 不被调用（非模型失败）
-        scheduleEngineCheck();
-        if (typeof Camera !== 'undefined') {
-          mpCamera = new Camera({ image: camVideo, onFrame: feed, width: 640, height: 480 });
-          mpCamera.start();
-        } else {
-          const loop = async () => { if (!state.camOn) return; if (camVideo.readyState >= 2) await feed(); camLoopId = requestAnimationFrame(loop); };
-          loop();
-        }
+        // ⚠️ 用 requestAnimationFrame 自己驱动喂帧（不用 Camera 工具，避免其构造签名差异导致 onFrame 从不触发）
+        const loop = async () => {
+          if (!state.camOn) return;
+          if (camVideo.readyState >= 2) await feed();
+          camLoopId = requestAnimationFrame(loop);
+        };
+        loop();
       } catch (e) {
         const reason = e && e.name === 'NotAllowedError' ? '摄像头权限被拒绝，请在浏览器地址栏允许访问' :
           (e && e.name === 'NotFoundError' ? '未检测到摄像头设备' : ('启动失败：' + (e && e.message ? e.message : e)));
@@ -1103,6 +1147,7 @@
       state.camOn = false; updateCamBtn();
       camBox.classList.add('hidden-preview');
       handCursor.active = false; lastLandmarks = null; handsDetected = 0;
+      lastPoseLandmarks = null;
       if (healthTimer) clearTimeout(healthTimer); setEngineState('idle'); setGesture('待机');
       if (previewLoopId) cancelAnimationFrame(previewLoopId);
       if (mpCamera) { try { mpCamera.stop(); } catch (e) {} mpCamera = null; }
