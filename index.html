@@ -240,6 +240,19 @@
         </div>
       </section>
 
+      <!-- 无障碍 -->
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold text-white/80">♿ 无障碍</h2>
+        <label class="flex items-center justify-between">
+          <span class="text-xs text-white/60">减少动态（关震动/慢动作/粒子）</span>
+          <input id="reduceMotionToggle" type="checkbox" class="w-5 h-5 accent-orange-500" />
+        </label>
+        <label class="flex items-center justify-between">
+          <span class="text-xs text-white/60">高对比模式（提亮去暗角）</span>
+          <input id="highContrastToggle" type="checkbox" class="w-5 h-5 accent-orange-500" />
+        </label>
+      </section>
+
       <!-- 今日目标 -->
       <section class="flex flex-col gap-2">
         <h2 class="font-bold text-white/80">📋 今日目标 <span class="text-[11px] text-white/40 font-normal">已完成 <span id="questDoneCount">0/5</span></span></h2>
@@ -421,6 +434,8 @@
       respawn: true,          // 物体破碎后自动重生
       sensitivity: 1,         // 手势灵敏度系数（越大越易触发）
       bodyOnStage: false,     // 是否将人体骨架叠加到主场景
+      reducedMotion: false,   // 无障碍：减少动态效果（关震动/慢动作/粒子）
+      highContrast: false,    // 无障碍：高对比模式（关压暗与暗角）
       // —— 成就 & 挑战 ——
       unlockedAch: [],        // 已解锁成就 id
       celebrated: [],         // 本局已庆祝的分数里程碑
@@ -1107,6 +1122,7 @@
     // 初始化环境漂浮粒子（每帧缓慢漂浮，渲染氛围）
     function initAmbient() {
       state.ambient = [];
+      if (state.reducedMotion) return; // 减少动态效果：不生成环境漂浮粒子
       for (let i = 0; i < 40; i++) {
         state.ambient.push({ x: rand(0, CANVAS_W), y: rand(0, CANVAS_H), r: rand(1, 3), vx: rand(-8, 8), vy: rand(6, 22), a: rand(0.1, 0.4) });
       }
@@ -1192,16 +1208,17 @@
       // 暖/冷光色调
       sctx.fillStyle = state.light.warm ? 'rgba(255,150,40,0.10)' : 'rgba(40,120,255,0.10)';
       sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-      // 亮度不足时压暗
-      const darkness = 1 - i;
-      if (darkness > 0) { sctx.fillStyle = `rgba(6,8,20,${darkness * 0.82})`; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H); }
-      // 暗角 vignette（中心亮边缘暗，增强聚焦）
-      const vg = sctx.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.35, CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.85);
-      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.35)');
-      sctx.fillStyle = vg; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      // 亮度不足时压暗 + 暗角 vignette（高对比模式下关闭，保证画面明亮清晰）
+      if (!state.highContrast) {
+        const darkness = 1 - i;
+        if (darkness > 0) { sctx.fillStyle = `rgba(6,8,20,${darkness * 0.82})`; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H); }
+        const vg = sctx.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.35, CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.85);
+        vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.35)');
+        sctx.fillStyle = vg; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      }
       // 主题特效：迪斯科旋转彩色光束；夜晚冷色压暗
       if (state.theme === 'disco') {
-        const tt = performance.now() / 1000;
+        const tt = state.reducedMotion ? 2 : performance.now() / 1000;
         sctx.globalCompositeOperation = 'lighter';
         for (let k = 0; k < 4; k++) {
           const hue = (tt * 60 + k * 90) % 360;
@@ -1230,7 +1247,7 @@
       spawnDebris(o.x, o.y, o.mat, 1);
       Sound.breakSound(o.mat);
       // 玻璃/金属破碎时触发短暂慢动作
-      if (o.mat === 'glass' || o.mat === 'metal') timeScale = 0.35;
+      if ((o.mat === 'glass' || o.mat === 'metal') && !state.reducedMotion) timeScale = 0.35;
       o.state = 'broken';
       if (o.id === state.selectedId) { state.selectedId = null; updateTargetUI(); }
       state.breakCount++;
@@ -1291,7 +1308,7 @@
     const SCORE_MILESTONES = [500, 1000, 2000, 5000, 10000, 20000, 50000];
     const CONFETTI_COLORS = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#f472b6'];
     function spawnConfetti(cx) {
-      const n = lowPerf ? 18 : 50;
+      const n = state.reducedMotion ? 10 : (lowPerf ? 18 : 50);
       for (let i = 0; i < n; i++) {
         state.particles.push({
           x: cx + rand(-320, 320), y: rand(-20, 40),
@@ -1490,7 +1507,7 @@
       sctx.lineWidth = 8; sctx.strokeStyle = 'rgba(220,38,38,.85)';
       sctx.fillStyle = 'rgba(251,146,60,.95)';
       const txt = 'x' + state.combo;
-      const wob = Math.sin(time * 8) * 4;
+      const wob = state.reducedMotion ? 0 : Math.sin(time * 8) * 4;
       sctx.strokeText(txt, CANVAS_W / 2, 300 + wob); sctx.fillText(txt, CANVAS_W / 2, 300 + wob);
       sctx.restore();
     }
@@ -2076,7 +2093,7 @@
       // 绘制
       sctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
       sctx.save();
-      if (state.shake > 0.5) sctx.translate(rand(-state.shake, state.shake), rand(-state.shake, state.shake));
+      if (state.shake > 0.5 && !state.reducedMotion) sctx.translate(rand(-state.shake, state.shake), rand(-state.shake, state.shake));
       drawBackground();
       updateDrawAmbient(dt);
       drawTrails();
@@ -2126,7 +2143,7 @@
     function updateBerserkFx() {
       if (state.berserk) {
         if (performance.now() > state.berserkUntil) { state.berserk = false; state.rage = 0; updateRageUI(); }
-        if (berserkFlashEl) berserkFlashEl.style.opacity = state.berserk ? (0.4 + Math.sin(performance.now()/80)*0.2) : 0;
+        if (berserkFlashEl) berserkFlashEl.style.opacity = state.berserk ? (state.reducedMotion ? 0.45 : (0.4 + Math.sin(performance.now()/80)*0.2)) : 0;
       } else if (berserkFlashEl) berserkFlashEl.style.opacity = 0;
     }
 
@@ -2314,7 +2331,10 @@
     // 重生开关
     document.getElementById('respawnToggle').addEventListener('change', (e) => { state.respawn = e.target.checked; Store.save({ respawn: state.respawn }); });
     // 骨架叠加主场景
-    document.getElementById('bodyStageToggle').addEventListener('change', (e) => { state.bodyOnStage = e.target.checked; Store.save({ bodyOnStage: state.bodyOnStage }); });
+    document.getElementById('bodyStageToggle').addEventListener('change', (e) => { state.bodyOnStage = e.target.checked; Store.save({ bodyOnStage: e.target.checked }); });
+    // 无障碍：减少动态 / 高对比
+    document.getElementById('reduceMotionToggle').addEventListener('change', (e) => { state.reducedMotion = e.target.checked; Store.save({ reducedMotion: state.reducedMotion }); initAmbient(); });
+    document.getElementById('highContrastToggle').addEventListener('change', (e) => { state.highContrast = e.target.checked; Store.save({ highContrast: state.highContrast }); });
     // 调试面板按钮
     const dbgToggleBtn = document.getElementById('dbgToggleBtn');
     dbgToggleBtn.addEventListener('click', () => { dbgVisible = !dbgVisible; dbgToggleBtn.textContent = dbgVisible ? '🔧 调试面板：开 (D)' : '🔧 调试面板：关 (D)'; });
@@ -2378,6 +2398,8 @@
       if (typeof s.sensitivity === 'number') { state.sensitivity = s.sensitivity; document.getElementById('sensSlider').value = Math.round(s.sensitivity*10); document.getElementById('sensVal').textContent = s.sensitivity.toFixed(1); }
       if (typeof s.respawn === 'boolean') { state.respawn = s.respawn; document.getElementById('respawnToggle').checked = s.respawn; }
       if (typeof s.bodyOnStage === 'boolean') { state.bodyOnStage = s.bodyOnStage; document.getElementById('bodyStageToggle').checked = s.bodyOnStage; }
+      if (typeof s.reducedMotion === 'boolean') { state.reducedMotion = s.reducedMotion; document.getElementById('reduceMotionToggle').checked = s.reducedMotion; }
+      if (typeof s.highContrast === 'boolean') { state.highContrast = s.highContrast; document.getElementById('highContrastToggle').checked = s.highContrast; }
       if (typeof s.totalBreak === 'number') state.totalBreak = s.totalBreak;
       if (typeof s.bestCombo === 'number') state.bestCombo = s.bestCombo;
       if (typeof s.musicOn === 'boolean') { state.musicOn = s.musicOn; document.getElementById('musicToggle').checked = s.musicOn; /* 音乐需用户手势启动，此处仅同步开关态，不自动播放 */ }
@@ -2408,6 +2430,10 @@
     })();
 
     updateAchCountUI();   // 初始成就计数
+    // 未手动设置时，尊重系统 prefers-reduced-motion 偏好
+    if (Store.load().reducedMotion === undefined && window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      state.reducedMotion = true; document.getElementById('reduceMotionToggle').checked = true; initAmbient();
+    }
     initQuests(); renderQuests();   // 每日目标：初始化并渲染
     // 小屏提示条 6 秒后自动淡出
     (function autoHideHint() {
