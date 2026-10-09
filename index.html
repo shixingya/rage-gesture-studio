@@ -78,11 +78,28 @@
             <span class="opacity-70">破坏计数：</span>
             <span id="uiBreak" class="font-bold text-rose-400">0</span>
           </div>
+          <div class="bg-white/15 backdrop-blur rounded-full px-4 py-1.5 text-sm flex items-center gap-2">
+            <span class="opacity-70">连击：</span>
+            <span id="uiCombo" class="font-bold text-orange-400">x0</span>
+          </div>
+          <div class="bg-white/15 backdrop-blur rounded-full px-4 py-1.5 text-sm flex items-center gap-2">
+            <span class="opacity-70">分数：</span>
+            <span id="uiScore" class="font-bold text-emerald-400">0</span>
+          </div>
+          <div class="bg-white/15 backdrop-blur rounded-full px-3 py-1.5 text-sm flex items-center gap-2">
+            <span class="opacity-70">🔥</span>
+            <div class="w-28 h-2.5 bg-black/40 rounded-full overflow-hidden">
+              <div id="uiRage" class="h-full bg-gradient-to-r from-orange-500 to-red-600" style="width:0%"></div>
+            </div>
+          </div>
         </div>
         <div class="flex items-center gap-2">
           <span class="bg-black/40 rounded-full px-3 py-1 text-xs" id="uiGesture">手势：待机</span>
         </div>
       </div>
+
+      <!-- 狂暴模式红闪遮罩 -->
+      <div id="berserkFlash" class="absolute inset-0 pointer-events-none z-10 opacity-0" style="background:radial-gradient(circle at center, transparent 30%, rgba(220,38,38,.55) 100%); transition:opacity .15s;"></div>
 
       <!-- 左上角场景切换快速按钮 -->
       <div class="absolute top-16 left-4 flex flex-col gap-2 z-20">
@@ -157,9 +174,42 @@
       </section>
 
       <!-- 音效 -->
-      <section class="flex items-center justify-between">
-        <h2 class="font-bold text-white/80">🔊 音效</h2>
-        <button id="muteBtn" class="badge bg-white/10 rounded-lg px-4 py-1.5">已开启</button>
+      <section class="flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <h2 class="font-bold text-white/80">🔊 音效</h2>
+          <button id="muteBtn" class="badge bg-white/10 rounded-lg px-4 py-1.5">已开启</button>
+        </div>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-white/60">音量：<span id="volVal">90</span></span>
+          <input id="volSlider" type="range" min="0" max="100" value="90" />
+        </label>
+      </section>
+
+      <!-- 玩法设置 -->
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold text-white/80">🎮 玩法</h2>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-white/60">手势灵敏度：<span id="sensVal">1.0</span></span>
+          <input id="sensSlider" type="range" min="5" max="30" value="10" />
+        </label>
+        <label class="flex items-center justify-between">
+          <span class="text-xs text-white/60">物体自动重生</span>
+          <input id="respawnToggle" type="checkbox" checked class="w-5 h-5 accent-orange-500" />
+        </label>
+        <label class="flex items-center justify-between">
+          <span class="text-xs text-white/60">人体骨架叠加主场景</span>
+          <input id="bodyStageToggle" type="checkbox" class="w-5 h-5 accent-orange-500" />
+        </label>
+        <button id="dbgToggleBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">🔧 调试面板：开 (D)</button>
+        <p class="text-[11px] text-white/40 mt-1">无摄像头？按键盘 1-6 模拟手势：</p>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button data-sim="hit" class="sim-btn bg-white/10 hover:bg-white/20 rounded py-1 text-xs">1 出拳</button>
+          <button data-sim="grab" class="sim-btn bg-white/10 hover:bg-white/20 rounded py-1 text-xs">2 抛掷</button>
+          <button data-sim="slap" class="sim-btn bg-white/10 hover:bg-white/20 rounded py-1 text-xs">3 拍</button>
+          <button data-sim="push" class="sim-btn bg-white/10 hover:bg-white/20 rounded py-1 text-xs">4 推</button>
+          <button data-sim="sweep" class="sim-btn bg-white/10 hover:bg-white/20 rounded py-1 text-xs">5 横扫</button>
+          <button data-sim="scare" class="sim-btn bg-white/10 hover:bg-white/20 rounded py-1 text-xs">6 吓</button>
+        </div>
       </section>
 
       <!-- 摄像头开关 -->
@@ -183,6 +233,37 @@
         </details>
       </div>
     </aside>
+  </div>
+
+  <!-- ================= 首屏引导遮罩 ================= -->
+  <div id="introMask" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="max-w-lg w-full bg-[#1b2130] rounded-2xl border border-white/10 p-7 shadow-2xl">
+      <h2 class="text-2xl font-black text-amber-400 mb-1">😤 欢迎来到手势宣泄室</h2>
+      <p class="text-sm text-white/60 mb-4">用手势把虚拟对象打、扔、扫、砸个精光，安全地释放情绪！</p>
+      <ul class="text-sm space-y-2 mb-5">
+        <li>👊 <b>握拳</b> → 连续击打</li>
+        <li>🤏 <b>捏合</b> → 抓起并甩出</li>
+        <li>🖐️ <b>张掌下拍/前推/横扫/吓唬</b> → 多种破坏</li>
+        <li>🖱️ 没摄像头？<b>鼠标拖拽/双击</b>或右侧 <b>1-6 模拟按钮</b>照样发泄</li>
+      </ul>
+      <label class="flex items-center gap-2 mb-4 text-xs text-white/60">
+        <input id="introNoMore" type="checkbox" class="w-4 h-4 accent-orange-500" /> 下次不再显示
+      </label>
+      <button id="introStartBtn" class="w-full bg-orange-500 hover:bg-orange-400 rounded-xl py-3 font-bold text-lg">🚀 开始发泄</button>
+      <p class="text-[11px] text-white/40 mt-3">⚠️ 启用摄像头建议用本地服务器：python -m http.server 8000</p>
+    </div>
+  </div>
+
+  <!-- ================= 重置确认弹窗 ================= -->
+  <div id="resetMask" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+    <div class="max-w-sm w-full bg-[#1b2130] rounded-2xl border border-white/10 p-6 shadow-2xl text-center">
+      <h3 class="text-lg font-bold mb-2">🔄 确定重置场景？</h3>
+      <p class="text-sm text-white/60 mb-5">将恢复所有物体并清零破坏计数、连击与分数。</p>
+      <div class="flex gap-3">
+        <button id="resetCancelBtn" class="flex-1 bg-white/10 hover:bg-white/20 rounded-lg py-2">取消</button>
+        <button id="resetOkBtn" class="flex-1 bg-rose-600 hover:bg-rose-500 rounded-lg py-2 font-bold">确定重置</button>
+      </div>
+    </div>
   </div>
 
   <!-- ================= 应用逻辑（模块化） ================= -->
@@ -224,9 +305,22 @@
       shake: 0,               // 屏幕震动强度（每帧衰减）
       light: { intensity: 70, warm: true, ambient: true },
       muted: false,
+      volume: 0.9,            // 主音量 0~1
       camOn: false,
       breakCount: 0,
       lastAction: 0,          // 防抖：上次触发动作的时间戳
+      // —— 游戏化扩展 ——
+      combo: 0,               // 连击数
+      comboTime: 0,           // 最近一次命中时间
+      bestCombo: 0,           // 最高连击
+      score: 0,               // 本局分数
+      totalBreak: 0,          // 累计破坏（跨局持久）
+      rage: 0,                // 愤怒值 0~100
+      berserk: false,         // 狂暴模式进行中
+      berserkUntil: 0,        // 狂暴结束时间
+      respawn: true,          // 物体破碎后自动重生
+      sensitivity: 1,         // 手势灵敏度系数（越大越易触发）
+      bodyOnStage: false,     // 是否将人体骨架叠加到主场景
     };
 
     // 交互用：当前被"抓住"拖动的对象（鼠标或手势共用）
@@ -238,6 +332,23 @@
     function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
     // 工具函数：生成随机数（区间）
     function rand(a, b) { return a + Math.random() * (b - a); }
+
+    // ============================================================
+    // 【本地持久化模块】设置与统计写入 localStorage，跨会话保留
+    // ============================================================
+    const Store = (() => {
+      const KEY = 'rage_gesture_studio_v1';
+      function load() {
+        try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
+      }
+      function save(patch) {
+        try {
+          const cur = load();
+          localStorage.setItem(KEY, JSON.stringify(Object.assign(cur, patch)));
+        } catch (e) { /* 隐私模式等写入失败则忽略 */ }
+      }
+      return { load, save };
+    })();
 
     // ============================================================
     // 【音效模块】优先使用 Web Audio 合成音，零外部依赖，
@@ -257,14 +368,16 @@
           if (!AC) return;
           ctx = new AC();
           masterGain = ctx.createGain();
-          masterGain.gain.value = state.muted ? 0 : 0.9;
+          masterGain.gain.value = state.muted ? 0 : state.volume;
           masterGain.connect(ctx.destination);
           ready = true;
         } catch (e) { /* 音频不可用则静默降级 */ }
       }
 
       function resume() { if (ctx && ctx.state === 'suspended') ctx.resume(); }
-      function setMuted(m) { if (masterGain) masterGain.gain.value = m ? 0 : 0.9; }
+      function applyGain() { if (masterGain) masterGain.gain.value = state.muted ? 0 : state.volume; }
+      function setMuted(m) { state.muted = m; applyGain(); }
+      function setVolume(v) { state.volume = v; applyGain(); }
 
       // 通用：一段带包络的振荡器
       function tone(freq, dur, type, vol, slideTo) {
@@ -315,8 +428,12 @@
       function cry() { tone(500, 0.35, 'sawtooth', 0.22, 120); tone(760, 0.25, 'triangle', 0.12, 200); }
       // 抓取
       function grab() { tone(400, 0.08, 'triangle', 0.18, 600); }
+      // UI 点击
+      function click() { tone(880, 0.05, 'square', 0.10, 1200); }
+      // 狂暴低吼（启动时的一声渐强）
+      function roar() { tone(120, 0.6, 'sawtooth', 0.30, 60); tone(80, 0.7, 'square', 0.22, 40); noise(0.5, 0.3, 400); }
 
-      return { init, resume, setMuted, impact, breakSound, whoosh, cry, grab };
+      return { init, resume, setMuted, setVolume, applyGain, impact, breakSound, whoosh, cry, grab, click, roar };
     })();
 
     // ============================================================
@@ -425,14 +542,18 @@
 
     // 创建一个场景对象
     function makeObj(o) {
-      return Object.assign({
+      const obj = Object.assign({
         id: 'obj_' + Math.random().toString(36).slice(2, 8),
         kind: 'item', mat: 'plastic',
         x: 0, y: 0, w: 80, h: 80, rot: 0,
         vx: 0, vy: 0, vr: 0,
-        state: 'idle', anim: 0, face: 'calm',
+        state: 'idle', anim: 0, face: 'calm', hp: 100,
         removable: true, // 是否可被彻底打碎移除
       }, o);
+      obj.homeX = obj.x; obj.homeY = obj.y; // 初始位置（重生用）
+      obj.sceneTag = state.scene;           // 所属场景（场景已切换则不重生）
+      obj.spec = Object.assign({}, o);       // 定义快照，供重生复制
+      return obj;
     }
 
     // 构建办公室场景
@@ -713,6 +834,66 @@
       if (o.id === state.selectedId) { state.selectedId = null; updateTargetUI(); }
       state.breakCount++;
       updateBreakUI();
+      state.totalBreak++;
+      addScore(o.kind === 'person' ? 30 : 50, o.x, o.y - o.h / 2);
+      addRage(o.base ? 0 : 20);
+      Store.save({ totalBreak: state.totalBreak, bestCombo: state.bestCombo });
+      if (!o.base && state.respawn) scheduleRespawn(o);
+    }
+
+    // 重生：延时在原位重新生成同类物体
+    function scheduleRespawn(o) {
+      setTimeout(() => {
+        if (state.scene !== o.sceneTag) return; // 场景已切换则不重生
+        if (!state.respawn) return;
+        const np = makeObj(Object.assign({}, o.spec, { mat: o.mat }));
+        state.objects.push(np);
+        refreshObjectSelect();
+        // 重生时轻隔动画
+        np.anim = 1; setAnim(np, 'shake');
+      }, 1600);
+    }
+
+    // 连击：每次命中累加，2.5s 无命中则重置
+    function bumpCombo() {
+      const now = performance.now();
+      if (now - state.comboTime < 2500) state.combo++;
+      else state.combo = 1;
+      state.comboTime = now;
+      if (state.combo > state.bestCombo) state.bestCombo = state.combo;
+      updateComboUI();
+      if (state.combo > 1 && state.combo % 5 === 0) spawnFloater(CANVAS_W / 2, 240, '🔥 ' + state.combo + ' 连击!', '#fb923c');
+    }
+
+    // 加分：基础分 × 连击倍率，并飘字
+    function addScore(base, x, y) {
+      const gain = Math.round(base * (1 + state.combo * 0.1));
+      state.score += gain;
+      updateScoreUI();
+      spawnFloater(x, y, '+' + gain, '#34d399');
+    }
+
+    // 愤怒值：充满则进入狂暴模式
+    function addRage(amount) {
+      if (amount <= 0) return;
+      state.rage = clamp(state.rage + amount, 0, 100);
+      updateRageUI();
+      if (!state.berserk && state.rage >= 100) triggerBerserk();
+    }
+
+    // 狂暴模式：屏幕闪红 + 扫落场景内所有可碎物
+    function triggerBerserk() {
+      state.berserk = true;
+      state.berserkUntil = performance.now() + 3500;
+      Sound.roar();
+      state.shake = 42;
+      spawnFloater(CANVAS_W / 2, 180, '💥 狂暴模式!! 💥', '#ef4444');
+      state.objects.forEach(o => {
+        if (o.state === 'broken' || o.base) return;
+        if (o.kind === 'person') { hurtPerson(o, 1); return; }
+        if (MATERIALS[o.mat].breakable) destroyObject(o);
+        else { o.state = 'fly'; o.vy = -400; o.vx = rand(-400, 400); o.vr = rand(-8, 8); }
+      });
     }
 
     // 小人受伤反馈（不破坏，仅后仰 + 痛表情）
@@ -728,6 +909,8 @@
       if (!o || o.state === 'broken') return;
       state.shake = Math.max(state.shake, 6 + force * 14);
       Sound.impact(force);
+      bumpCombo(); addRage(5 + force * 8);
+      addScore(5, o.x, o.y - o.h / 2);
       if (o.kind === 'person') { hurtPerson(o, force); return; }
       spawnDebris(o.x, o.y - o.h * 0.2, o.mat, force * 0.25);
       setAnim(o, 'shake');
@@ -890,6 +1073,10 @@
       prevWrist = { x: pc.x, y: pc.y, z: pc.z, t: now };
     
       const speedH = Math.abs(vx);
+      // 灵敏度系数（0.5~3.0）：越高则速度阈值越低、冷却越短，越易触发
+      const SENS = clamp(state.sensitivity, 0.5, 3);
+      const thr = (base) => base / SENS;
+      const cd = (base) => base / SENS;
       // 调试：指伸展数、捏合间距（归一化）
       const extCount = [isExt(lm, 8, 6), isExt(lm, 12, 10), isExt(lm, 16, 14), isExt(lm, 20, 18)].filter(Boolean).length;
       const pinchGap = (dist(lm[4], lm[8]) / (dist(lm[0], lm[9]) || 1)).toFixed(2);
@@ -899,13 +1086,13 @@
       dbg = { hands: all.length, pose: curPose, ext: extCount + '/4', pinch: pinchGap, palm: Math.round(pc.x) + ',' + Math.round(pc.y), target: sel ? sel.name : '无' };
       
       // 1) 双手横扫：两只手且快速横向移动
-      if (all.length >= 2 && speedH > 350 && canFire('sweep', 600)) {
+      if (all.length >= 2 && speedH > thr(350) && canFire('sweep', cd(600))) {
         actSweep(pc.y); setGesture('双手横扫'); return;
       }
       // 2) 握拳→连续击打（姿态保持式，握住就一直打，无需快速挥动）
       if (isFist(lm)) {
         setGesture('握拳');
-        if (canFire('hit', 340)) { const t = sel || nearestObj(pc.x, pc.y, 99999); if (t) actHit(t, 0.85); }
+        if (canFire('hit', cd(340))) { const t = sel || nearestObj(pc.x, pc.y, 99999); if (t) actHit(t, 0.85); }
         return;
       }
       // 3) 捏合抓取：抓住/就近物体，拖动，松开甩出
@@ -929,13 +1116,13 @@
         if (grabbed) { actThrow(grabbed.obj, clamp(grabbed.vx, -1200, 1200), clamp(grabbed.vy - 200, -1200, 1200)); grabbed = null; }
       }
       // 4) 手掌向下猛拍：张开手 + 向下高速
-      if (isOpenPalm(lm) && vy > 500 && canFire('slap', 500)) {
+      if (isOpenPalm(lm) && vy > thr(500) && canFire('slap', cd(500))) {
         const t = sel || nearestObj(pc.x, pc.y, 99999);
         if (t) { actSlap(t); setGesture('下拍'); }
         return;
       }
       // 5) 手掌向前推送：z 快速减小（靠近镜头）
-      if (isOpenPalm(lm) && vz < -0.9 && canFire('push', 500)) {
+      if (isOpenPalm(lm) && vz < -0.9 * (2 - clamp(SENS/1.5,0.5,1.5)) && canFire('push', cd(500))) {
         const t = sel || nearestObj(pc.x, pc.y, 99999);
         if (t) { actPush(t); setGesture('前推'); }
         return;
@@ -943,7 +1130,7 @@
       // 6) 张开手掌保持→吓一吓（姿态保持式）
       if (isOpenPalm(lm)) {
         setGesture('张掌');
-        if (canFire('scare', 1200)) { const t = sel || nearestObj(pc.x, pc.y, 99999); if (t) actScare(t); }
+        if (canFire('scare', cd(1200))) { const t = sel || nearestObj(pc.x, pc.y, 99999); if (t) actScare(t); }
         return;
       }
       setGesture('手(' + extCount + '/4指)');
@@ -1011,6 +1198,16 @@
         sctx.fillStyle = '#f97316';
         for (let i = 0; i < 21; i++) { const p = P(i); sctx.beginPath(); sctx.arc(p.x, p.y, 6, 0, Math.PI * 2); sctx.fill(); }
       }
+      sctx.restore();
+    }
+
+    // 将人体骨架按画面位置叠加到主舞台（可选开关）
+    function drawPoseOnStage() {
+      if (!lastPoseLandmarks || !lastPoseLandmarks.length) return;
+      const CONN = [[5,6],[5,11],[6,12],[11,12],[5,7],[7,9],[6,8],[8,10],[11,13],[13,15],[12,14],[14,16]];
+      sctx.save(); sctx.globalAlpha = 0.6; sctx.lineWidth = 6; sctx.lineCap = 'round'; sctx.strokeStyle = '#22d3ee';
+      const P = (i) => ({ x: (1 - lastPoseLandmarks[i].x) * CANVAS_W, y: lastPoseLandmarks[i].y * CANVAS_H });
+      for (const [a, b] of CONN) { const pa = P(a), pb = P(b); sctx.beginPath(); sctx.moveTo(pa.x, pa.y); sctx.lineTo(pb.x, pb.y); sctx.stroke(); }
       sctx.restore();
     }
 
@@ -1163,6 +1360,10 @@
       const dt = Math.min(0.05, (t - lastTime) / 1000); lastTime = t;
 
       updateObjects(dt);
+      // 连击超时自然重置（2.5s 无命中）
+      if (state.combo > 0 && performance.now() - state.comboTime > 2500) { state.combo = 0; updateComboUI(); }
+      // 狂暴特效与自动退出
+      updateBerserkFx();
       // 鼠标拖动跟随（无摄像头时）
       if (grabbed && !handCursor.active) {
         grabbed.obj.x = grabbed.lastX + grabbed.offX; grabbed.obj.y = grabbed.lastY + grabbed.offY;
@@ -1188,6 +1389,7 @@
       }
       sctx.restore();
       drawLighting();
+      if (state.bodyOnStage && state.camOn) drawPoseOnStage(); // 人体骨架叠加主场景
       drawDebug(); // 常驻调试面板
 
       requestAnimationFrame(frame);
@@ -1204,6 +1406,20 @@
     const hudPoseEl = document.getElementById('hudPose');
     const objSelect = document.getElementById('objSelect');
     const camTipEl = document.getElementById('camTip');
+
+    // 连击 UI
+    const comboEl = document.getElementById('uiCombo');
+    const rageEl = document.getElementById('uiRage');
+    const berserkFlashEl = document.getElementById('berserkFlash');
+    function updateComboUI() { if (comboEl) comboEl.textContent = 'x' + state.combo; }
+    function updateRageUI() { if (rageEl) rageEl.style.width = state.rage + '%'; }
+    // 狂暴红闪衰减 & 自动退出
+    function updateBerserkFx() {
+      if (state.berserk) {
+        if (performance.now() > state.berserkUntil) { state.berserk = false; state.rage = 0; updateRageUI(); }
+        if (berserkFlashEl) berserkFlashEl.style.opacity = state.berserk ? (0.4 + Math.sin(performance.now()/80)*0.2) : 0;
+      } else if (berserkFlashEl) berserkFlashEl.style.opacity = 0;
+    }
 
     function setGesture(name) {
       uiGesture.textContent = '手势：' + name; curPose = name;
@@ -1222,6 +1438,8 @@
     }
     function setCamTip(txt) { camTipEl.style.display = txt ? 'flex' : 'none'; camTipEl.textContent = txt; }
     function updateBreakUI() { uiBreak.textContent = state.breakCount; }
+    const scoreEl = document.getElementById('uiScore');
+    function updateScoreUI() { if (scoreEl) scoreEl.textContent = state.score; }
     function updateTargetUI() {
       const o = selectedObj();
       uiTarget.textContent = o ? o.name : '未选择';
@@ -1283,14 +1501,14 @@
     // 灯光强度
     const lightSlider = document.getElementById('lightSlider');
     const lightVal = document.getElementById('lightVal');
-    lightSlider.addEventListener('input', () => { state.light.intensity = +lightSlider.value; lightVal.textContent = lightSlider.value; });
+    lightSlider.addEventListener('input', () => { state.light.intensity = +lightSlider.value; lightVal.textContent = lightSlider.value; Store.save({ light: state.light }); });
     // 暖/冷光
     const warmBtn = document.getElementById('warmBtn'), coolBtn = document.getElementById('coolBtn');
-    function setLightWarm(w) { state.light.warm = w; warmBtn.classList.toggle('active', w); coolBtn.classList.toggle('active', !w); }
+    function setLightWarm(w) { state.light.warm = w; warmBtn.classList.toggle('active', w); coolBtn.classList.toggle('active', !w); Store.save({ light: state.light }); }
     warmBtn.addEventListener('click', () => setLightWarm(true));
     coolBtn.addEventListener('click', () => setLightWarm(false));
     // 环境光
-    document.getElementById('ambientToggle').addEventListener('change', (e) => { state.light.ambient = e.target.checked; });
+    document.getElementById('ambientToggle').addEventListener('change', (e) => { state.light.ambient = e.target.checked; Store.save({ light: state.light }); });
     // 材质
     const matBtns = document.querySelectorAll('.mat-btn');
     function highlightMat(mat) { matBtns.forEach(b => b.classList.toggle('active', b.dataset.mat === mat)); }
@@ -1304,22 +1522,65 @@
     // 静音
     const muteBtn = document.getElementById('muteBtn');
     muteBtn.addEventListener('click', () => {
-      state.muted = !state.muted; Sound.init(); Sound.setMuted(state.muted);
+      state.muted = !state.muted; Sound.init(); Sound.setMuted(state.muted); Store.save({ muted: state.muted });
       muteBtn.textContent = state.muted ? '已静音' : '已开启'; muteBtn.classList.toggle('active', !state.muted);
     });
     // 摄像头开关
     const camBtn = document.getElementById('camBtn');
     camBtn.addEventListener('click', () => { state.camOn ? stopCamera() : startCamera(); });
     function updateCamBtn() { camBtn.textContent = state.camOn ? '关闭' : '开启'; camBtn.classList.toggle('active', state.camOn); }
-    // 重置
-    document.getElementById('resetBtn').addEventListener('click', () => {
-      setScene(state.scene); state.breakCount = 0; updateBreakUI();
+    // 重置（弹确认）
+    const resetMask = document.getElementById('resetMask');
+    function doReset() {
+      setScene(state.scene); state.breakCount = 0; state.combo = 0; state.score = 0; state.rage = 0; state.berserk = false;
+      updateBreakUI(); updateComboUI(); updateScoreUI(); updateRageUI();
       spawnFloater(CANVAS_W / 2, 200, '✅ 场景已重置', '#86efac');
+    }
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      resetMask.classList.remove('hidden'); resetMask.classList.add('flex');
     });
+    document.getElementById('resetCancelBtn').addEventListener('click', () => { resetMask.classList.add('hidden'); resetMask.classList.remove('flex'); });
+    document.getElementById('resetOkBtn').addEventListener('click', () => { doReset(); resetMask.classList.add('hidden'); resetMask.classList.remove('flex'); });
     // 首次全局点击解锁音频
     window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); }, { once: false });
     // 按 D 键切换调试面板
-    window.addEventListener('keydown', (e) => { if (e.key === 'd' || e.key === 'D') dbgVisible = !dbgVisible; });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'd' || e.key === 'D') { dbgVisible = !dbgVisible; return; }
+      // 键盘 1-6 模拟手势
+      const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
+      if (simMap[e.key]) { simGesture(simMap[e.key]); }
+    });
+    // 模拟手势按钮
+    document.querySelectorAll('.sim-btn').forEach(b => b.addEventListener('click', () => simGesture(b.dataset.sim)));
+    function simGesture(type) {
+      Sound.init(); Sound.resume();
+      const sel = selectedObj() || nearestObj(CANVAS_W/2, CANVAS_H/2, 99999);
+      if (!sel) { spawnFloater(CANVAS_W/2, 200, '没有可选目标', '#fde68a'); return; }
+      switch(type) {
+        case 'hit': actHit(sel, 0.9); setGesture('出拳(模拟)'); break;
+        case 'grab': actGrab(sel); actThrow(sel, rand(400,700)*Math.random()>0.5?1:-1, -rand(300,600)); setGesture('抛掷(模拟)'); break;
+        case 'slap': actSlap(sel); setGesture('下拍(模拟)'); break;
+        case 'push': actPush(sel); setGesture('前推(模拟)'); break;
+        case 'sweep': actSweep(sel.y); setGesture('横扫(模拟)'); break;
+        case 'scare': actScare(sel); setGesture('吓唬(模拟)'); break;
+      }
+      spawnFloater(sel.x, sel.y - sel.h/2 - 30, '⌨ 模拟', '#a78bfa');
+    }
+    // 音量滑块
+    const volSlider = document.getElementById('volSlider');
+    const volVal = document.getElementById('volVal');
+    volSlider.addEventListener('input', () => { Sound.init(); const v = volSlider.value/100; Sound.setVolume(v); volVal.textContent = volSlider.value; Store.save({ volume: v }); });
+    // 灵敏度滑块
+    const sensSlider = document.getElementById('sensSlider');
+    const sensVal = document.getElementById('sensVal');
+    sensSlider.addEventListener('input', () => { state.sensitivity = sensSlider.value / 10; sensVal.textContent = state.sensitivity.toFixed(1); Store.save({ sensitivity: state.sensitivity }); });
+    // 重生开关
+    document.getElementById('respawnToggle').addEventListener('change', (e) => { state.respawn = e.target.checked; Store.save({ respawn: state.respawn }); });
+    // 骨架叠加主场景
+    document.getElementById('bodyStageToggle').addEventListener('change', (e) => { state.bodyOnStage = e.target.checked; Store.save({ bodyOnStage: state.bodyOnStage }); });
+    // 调试面板按钮
+    const dbgToggleBtn = document.getElementById('dbgToggleBtn');
+    dbgToggleBtn.addEventListener('click', () => { dbgVisible = !dbgVisible; dbgToggleBtn.textContent = dbgVisible ? '🔧 调试面板：开 (D)' : '🔧 调试面板：关 (D)'; });
 
     // ============================================================
     // 【启动】
@@ -1329,6 +1590,39 @@
     setLightWarm(true);
     setCamTip('点击“开启”启用摄像头');
     camBox.classList.add('hidden-preview'); // 默认隐藏预览，开启后显示
+
+    // —— 从 localStorage 恢复上次的设置与统计 ——
+    (function restoreSettings() {
+      const s = Store.load();
+      if (typeof s.volume === 'number') { state.volume = s.volume; Sound.setVolume(s.volume); document.getElementById('volSlider').value = Math.round(s.volume*100); document.getElementById('volVal').textContent = document.getElementById('volSlider').value; }
+      if (typeof s.muted === 'boolean') { state.muted = s.muted; const mb = document.getElementById('muteBtn'); mb.textContent = s.muted ? '已静音' : '已开启'; mb.classList.toggle('active', !s.muted); }
+      if (typeof s.sensitivity === 'number') { state.sensitivity = s.sensitivity; document.getElementById('sensSlider').value = Math.round(s.sensitivity*10); document.getElementById('sensVal').textContent = s.sensitivity.toFixed(1); }
+      if (typeof s.respawn === 'boolean') { state.respawn = s.respawn; document.getElementById('respawnToggle').checked = s.respawn; }
+      if (typeof s.bodyOnStage === 'boolean') { state.bodyOnStage = s.bodyOnStage; document.getElementById('bodyStageToggle').checked = s.bodyOnStage; }
+      if (typeof s.totalBreak === 'number') state.totalBreak = s.totalBreak;
+      if (typeof s.bestCombo === 'number') state.bestCombo = s.bestCombo;
+      if (s.light) {
+        Object.assign(state.light, s.light);
+        document.getElementById('lightSlider').value = state.light.intensity;
+        document.getElementById('lightVal').textContent = state.light.intensity;
+        document.getElementById('ambientToggle').checked = state.light.ambient;
+        setLightWarm(state.light.warm);
+      }
+    })();
+
+    // —— 引导遮罩：首次（或上次未“不再显示”）进入时展示 ——
+    (function setupIntro() {
+      const mask = document.getElementById('introMask');
+      const noMoreEl = document.getElementById('introNoMore');
+      if (Store.load().hideIntro) mask.style.display = 'none';
+      document.getElementById('introStartBtn').addEventListener('click', () => {
+        Sound.init(); Sound.resume();
+        if (noMoreEl.checked) Store.save({ hideIntro: true });
+        mask.style.transition = 'opacity .4s'; mask.style.opacity = '0';
+        setTimeout(() => mask.style.display = 'none', 400);
+      });
+    })();
+
     requestAnimationFrame(frame);
     // ===== 应用启动完成 =====
   </script>
