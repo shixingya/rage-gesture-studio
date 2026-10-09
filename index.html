@@ -107,6 +107,17 @@
         <button data-scene="room" class="scene-btn badge bg-white/15 hover:bg-white/25 rounded-lg px-3 py-2 text-left text-sm">🧱 空发泄房</button>
       </div>
 
+      <!-- 成就弹框区（右上角堆叠） -->
+      <div id="achToastBox" class="absolute top-16 right-4 flex flex-col gap-2 z-30 pointer-events-none"></div>
+
+      <!-- 挑战模式倒计时 -->
+      <div id="challengeBar" class="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-16 z-20 hidden items-center gap-3 bg-black/60 backdrop-blur rounded-full px-5 py-2 pointer-events-none">
+        <span class="text-sm">⏱ 挑战剩余</span>
+        <span id="challengeTime" class="text-2xl font-black text-amber-400">60</span>
+        <span class="text-sm">秒 · 得分</span>
+        <span id="challengeScore" class="text-2xl font-black text-emerald-400">0</span>
+      </div>
+
       <!-- 免责声明 -->
       <div id="disclaimer" class="text-center text-xs text-white/70">
         ⚠️ 本程序仅为虚拟趣味情绪释放工具，请勿模仿现实破坏与暴力行为。
@@ -200,6 +211,8 @@
           <span class="text-xs text-white/60">人体骨架叠加主场景</span>
           <input id="bodyStageToggle" type="checkbox" class="w-5 h-5 accent-orange-500" />
         </label>
+        <button id="challengeBtn" class="bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 text-sm font-bold">⏱ 开始 60 秒挑战</button>
+        <p class="text-[11px] text-white/40">成就：已解锁 <span id="achCount">0</span>/<span id="achTotal">0</span>　<button id="achListBtn" class="underline">查看</button></p>
         <button id="dbgToggleBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">🔧 调试面板：开 (D)</button>
         <p class="text-[11px] text-white/40 mt-1">无摄像头？按键盘 1-6 模拟手势：</p>
         <div class="grid grid-cols-3 gap-1.5">
@@ -266,6 +279,21 @@
     </div>
   </div>
 
+  <!-- ================= 挑战结果弹窗 ================= -->
+  <div id="resultMask" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="max-w-md w-full bg-[#1b2130] rounded-2xl border border-white/10 p-7 shadow-2xl text-center">
+      <div class="text-5xl mb-2">🏆</div>
+      <h3 class="text-xl font-black text-amber-400 mb-4">挑战结束！</h3>
+      <div class="grid grid-cols-2 gap-3 mb-5 text-left">
+        <div class="bg-white/5 rounded-lg p-3"><div class="text-xs text-white/50">本局得分</div><div id="resScore" class="text-2xl font-black text-emerald-400">0</div></div>
+        <div class="bg-white/5 rounded-lg p-3"><div class="text-xs text-white/50">摧毁数量</div><div id="resBreak" class="text-2xl font-black text-rose-400">0</div></div>
+        <div class="bg-white/5 rounded-lg p-3"><div class="text-xs text-white/50">最高连击</div><div id="resCombo" class="text-2xl font-black text-orange-400">0</div></div>
+        <div class="bg-white/5 rounded-lg p-3"><div class="text-xs text-white/50">历史最佳</div><div id="resBest" class="text-2xl font-black text-sky-400">0</div></div>
+      </div>
+      <button id="resultCloseBtn" class="w-full bg-orange-500 hover:bg-orange-400 rounded-xl py-2.5 font-bold">返回自由模式</button>
+    </div>
+  </div>
+
   <!-- ================= 应用逻辑（模块化） ================= -->
   <script>
     "use strict";
@@ -321,6 +349,9 @@
       respawn: true,          // 物体破碎后自动重生
       sensitivity: 1,         // 手势灵敏度系数（越大越易触发）
       bodyOnStage: false,     // 是否将人体骨架叠加到主场景
+      // —— 成就 & 挑战 ——
+      unlockedAch: [],        // 已解锁成就 id
+      challenge: { active: false, timeLeft: 60, score: 0, spawnTimer: 0, best: 0 },
     };
 
     // 交互用：当前被"抓住"拖动的对象（鼠标或手势共用）
@@ -349,6 +380,45 @@
       }
       return { load, save };
     })();
+
+    // ============================================================
+    // 【成就系统】监听分数/连击/摧毁里程碑，解锁时右上角弹框
+    // ============================================================
+    const ACHIEVEMENTS = [
+      { id: 'first_break', name: '初试身手', desc: '首次摧毁物体', icon: '💡', cond: () => state.totalBreak >= 1 },
+      { id: 'break_20',    name: '拆家新手', desc: '累计摧毁 20 个', icon: '🔨', cond: () => state.totalBreak >= 20 },
+      { id: 'break_100',   name: '破坏之王', desc: '累计摧毁 100 个', icon: '👑', cond: () => state.totalBreak >= 100 },
+      { id: 'combo_10',    name: '连击达人', desc: '达成 10 连击', icon: '🔥', cond: () => state.bestCombo >= 10 },
+      { id: 'combo_30',    name: '无敌连招', desc: '达成 30 连击', icon: '⚡', cond: () => state.bestCombo >= 30 },
+      { id: 'score_1000',  name: '小有所成', desc: '本局得分达 1000', icon: '🎯', cond: () => state.score >= 1000 },
+      { id: 'score_5000',  name: '宣泄大师', desc: '本局得分达 5000', icon: '🏆', cond: () => state.score >= 5000 },
+      { id: 'berserk_1',   name: '理性崩塌', desc: '首次进入狂暴模式', icon: '😡', cond: () => state._berserkSeen },
+    ];
+    const achToastBox = document.getElementById('achToastBox');
+    function checkAchievements() {
+      for (const a of ACHIEVEMENTS) {
+        if (state.unlockedAch.includes(a.id)) continue;
+        let ok = false; try { ok = a.cond(); } catch (e) { ok = false; }
+        if (ok) unlockAch(a);
+      }
+    }
+    function unlockAch(a) {
+      state.unlockedAch.push(a.id);
+      Store.save({ unlockedAch: state.unlockedAch });
+      updateAchCountUI();
+      if (!achToastBox) return;
+      const el = document.createElement('div');
+      el.className = 'bg-gradient-to-r from-amber-500/90 to-orange-600/90 rounded-xl px-4 py-2 shadow-lg flex items-center gap-3 max-w-xs';
+      el.innerHTML = `<span style="font-size:26px">${a.icon}</span><div><div class="font-bold text-sm">🏅 成就解锁：${a.name}</div><div class="text-[11px] text-white/80">${a.desc}</div></div>`;
+      achToastBox.appendChild(el);
+      Sound.unlock();
+      setTimeout(() => { el.style.transition = 'opacity .5s, transform .5s'; el.style.opacity = '0'; el.style.transform = 'translateX(40px)'; setTimeout(() => el.remove(), 500); }, 3200);
+    }
+    function updateAchCountUI() {
+      const c = document.getElementById('achCount'); const t = document.getElementById('achTotal');
+      if (c) c.textContent = state.unlockedAch.length;
+      if (t) t.textContent = ACHIEVEMENTS.length;
+    }
 
     // ============================================================
     // 【音效模块】优先使用 Web Audio 合成音，零外部依赖，
@@ -432,8 +502,10 @@
       function click() { tone(880, 0.05, 'square', 0.10, 1200); }
       // 狂暴低吼（启动时的一声渐强）
       function roar() { tone(120, 0.6, 'sawtooth', 0.30, 60); tone(80, 0.7, 'square', 0.22, 40); noise(0.5, 0.3, 400); }
+      // 成就解锁（上行双音）
+      function unlock() { tone(660, 0.14, 'triangle', 0.22, 880); setTimeout(() => tone(880, 0.22, 'triangle', 0.22, 1320), 120); }
 
-      return { init, resume, setMuted, setVolume, applyGain, impact, breakSound, whoosh, cry, grab, click, roar };
+      return { init, resume, setMuted, setVolume, applyGain, impact, breakSound, whoosh, cry, grab, click, roar, unlock };
     })();
 
     // ============================================================
@@ -882,6 +954,9 @@
       addScore(o.kind === 'person' ? 30 : 50, o.x, o.y - o.h / 2);
       addRage(o.base ? 0 : 20);
       Store.save({ totalBreak: state.totalBreak, bestCombo: state.bestCombo });
+      // 挑战模式：额外奖励分并补位新目标
+      if (state.challenge.active && !o.base) { state.challenge.score += 20; updateChallengeUI(); spawnChallengeTarget(); }
+      checkAchievements();
       if (!o.base && state.respawn) scheduleRespawn(o);
     }
 
@@ -914,7 +989,9 @@
       const gain = Math.round(base * (1 + state.combo * 0.1));
       state.score += gain;
       updateScoreUI();
+      if (state.challenge.active) { state.challenge.score += gain; updateChallengeUI(); }
       spawnFloater(x, y, '+' + gain, '#34d399');
+      checkAchievements();
     }
 
     // 愤怒值：充满则进入狂暴模式
@@ -928,6 +1005,7 @@
     // 狂暴模式：屏幕闪红 + 扫落场景内所有可碎物
     function triggerBerserk() {
       state.berserk = true;
+      state._berserkSeen = true;
       state.berserkUntil = performance.now() + 3500;
       Sound.roar();
       state.shake = 42;
@@ -1060,6 +1138,75 @@
           if (o.x < -80 || o.x > CANVAS_W + 80) destroyObject(o);
         }
       }
+    }
+
+    // ============================================================
+    // 【挑战模式】60 秒内尽可能多摧毁随机生成的目标
+    // ============================================================
+    const CHALLENGE_TARGET_SHAPES = [
+      { shape: 'bottle', w: 60, h: 140, mat: 'glass' },
+      { shape: 'plate', w: 120, h: 50, mat: 'glass' },
+      { shape: 'cup', w: 60, h: 80, mat: 'plastic' },
+      { shape: 'bucket', w: 100, h: 130, mat: 'plastic' },
+      { shape: 'plank', w: 180, h: 50, mat: 'wood' },
+      { shape: 'folder', w: 90, h: 60, mat: 'metal' },
+    ];
+    const challengeBarEl = document.getElementById('challengeBar');
+    const challengeTimeEl = document.getElementById('challengeTime');
+    const challengeScoreEl = document.getElementById('challengeScore');
+    function updateChallengeUI() {
+      if (challengeTimeEl) challengeTimeEl.textContent = Math.ceil(state.challenge.timeLeft);
+      if (challengeScoreEl) challengeScoreEl.textContent = state.challenge.score;
+    }
+    function startChallenge() {
+      // 清空现有可碎物，只保留基础桌面
+      state.objects = state.objects.filter(o => o.base);
+      state.challenge.active = true;
+      state.challenge.timeLeft = 60;
+      state.challenge.score = 0;
+      state.challenge.spawnTimer = 0;
+      state.score = 0; updateScoreUI();
+      state.breakCount = 0; updateBreakUI();
+      if (challengeBarEl) { challengeBarEl.classList.remove('hidden'); challengeBarEl.classList.add('flex'); }
+      const btn = document.getElementById('challengeBtn'); if (btn) btn.textContent = '⏱ 挑战进行中…';
+      updateChallengeUI();
+      spawnFloater(CANVAS_W / 2, 200, '⏱ 60 秒挑战开始！', '#34d399');
+      for (let i = 0; i < 3; i++) spawnChallengeTarget();
+    }
+    function endChallenge() {
+      state.challenge.active = false;
+      if (challengeBarEl) { challengeBarEl.classList.add('hidden'); challengeBarEl.classList.remove('flex'); }
+      const btn = document.getElementById('challengeBtn'); if (btn) btn.textContent = '⏱ 开始 60 秒挑战';
+      if (state.challenge.score > (state.challenge.best || 0)) { state.challenge.best = state.challenge.score; Store.save({ challengeBest: state.challenge.best }); }
+      // 展示结果弹窗
+      document.getElementById('resScore').textContent = state.challenge.score;
+      document.getElementById('resBreak').textContent = state.breakCount;
+      document.getElementById('resCombo').textContent = state.bestCombo;
+      document.getElementById('resBest').textContent = state.challenge.best || 0;
+      const rm = document.getElementById('resultMask'); rm.classList.remove('hidden'); rm.classList.add('flex');
+    }
+    // 随机生成一个挑战目标（限制场上数量，直接落位静置供击打）
+    function spawnChallengeTarget() {
+      const live = state.objects.filter(o => !o.base && o.state !== 'broken');
+      if (live.length >= 6) return;
+      const spec = CHALLENGE_TARGET_SHAPES[Math.floor(Math.random() * CHALLENGE_TARGET_SHAPES.length)];
+      const x = rand(240, CANVAS_W - 200);
+      const floorY = state.scene === 'office' ? 500 : 560;
+      const y = floorY - spec.h / 2;
+      const o = makeObj(Object.assign({ name: '目标', kind: 'item' }, spec, { x, y }));
+      state.objects.push(o);
+      setAnim(o, 'shake'); // 弹出动画
+      refreshObjectSelect();
+    }
+    // 每帧推进挑战计时
+    function tickChallenge(dt) {
+      if (!state.challenge.active) return;
+      if (!(dt > 0)) return;              // 防负/NaN 帧步进
+      state.challenge.timeLeft -= dt;
+      state.challenge.spawnTimer -= dt;
+      if (state.challenge.spawnTimer <= 0) { spawnChallengeTarget(); state.challenge.spawnTimer = 1.8; }
+      if (state.challenge.timeLeft <= 0) { state.challenge.timeLeft = 0; endChallenge(); }
+      updateChallengeUI();
     }
 
     // ============================================================
@@ -1432,6 +1579,8 @@
       if (state.combo > 0 && performance.now() - state.comboTime > 2500) { state.combo = 0; updateComboUI(); }
       // 狂暴特效与自动退出
       updateBerserkFx();
+      // 挑战倒计时推进
+      tickChallenge(dt);
       // 鼠标拖动跟随（无摄像头时）
       if (grabbed && !handCursor.active) {
         grabbed.obj.x = grabbed.lastX + grabbed.offX; grabbed.obj.y = grabbed.lastY + grabbed.offY;
@@ -1650,6 +1799,26 @@
     // 调试面板按钮
     const dbgToggleBtn = document.getElementById('dbgToggleBtn');
     dbgToggleBtn.addEventListener('click', () => { dbgVisible = !dbgVisible; dbgToggleBtn.textContent = dbgVisible ? '🔧 调试面板：开 (D)' : '🔧 调试面板：关 (D)'; });
+    // 挑战模式按钮
+    document.getElementById('challengeBtn').addEventListener('click', () => { Sound.init(); Sound.resume(); if (!state.challenge.active) startChallenge(); });
+    // 成就列表查看（弹框逐条）
+    document.getElementById('achListBtn').addEventListener('click', () => {
+      if (!achToastBox) return;
+      achToastBox.innerHTML = '';
+      ACHIEVEMENTS.forEach(a => {
+        const got = state.unlockedAch.includes(a.id);
+        const el = document.createElement('div');
+        el.className = (got ? 'bg-amber-500/80' : 'bg-white/10') + ' rounded-lg px-3 py-1.5 text-xs flex items-center gap-2';
+        el.innerHTML = `<span>${got ? a.icon : '🔒'}</span><span class="${got ? '' : 'opacity-50'}">${a.name}·${a.desc}</span>`;
+        achToastBox.appendChild(el);
+      });
+      setTimeout(() => { achToastBox.innerHTML = ''; }, 5000);
+    });
+    // 挑战结果关闭
+    document.getElementById('resultCloseBtn').addEventListener('click', () => {
+      const rm = document.getElementById('resultMask'); rm.classList.add('hidden'); rm.classList.remove('flex');
+      setScene(state.scene); // 回到自由模式重建场景
+    });
 
     // ============================================================
     // 【启动】
@@ -1670,6 +1839,8 @@
       if (typeof s.bodyOnStage === 'boolean') { state.bodyOnStage = s.bodyOnStage; document.getElementById('bodyStageToggle').checked = s.bodyOnStage; }
       if (typeof s.totalBreak === 'number') state.totalBreak = s.totalBreak;
       if (typeof s.bestCombo === 'number') state.bestCombo = s.bestCombo;
+      if (Array.isArray(s.unlockedAch)) state.unlockedAch = s.unlockedAch.slice();
+      if (typeof s.challengeBest === 'number') state.challenge.best = s.challengeBest;
       if (s.light) {
         Object.assign(state.light, s.light);
         document.getElementById('lightSlider').value = state.light.intensity;
@@ -1692,6 +1863,8 @@
       });
     })();
 
+    updateAchCountUI();   // 初始成就计数
+    window.__rage = state; // 调试/E2E 可断言入口
     requestAnimationFrame(frame);
     // ===== 应用启动完成 =====
   </script>
