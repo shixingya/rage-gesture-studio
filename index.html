@@ -240,6 +240,12 @@
         </div>
       </section>
 
+      <!-- 今日目标 -->
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold text-white/80">📋 今日目标 <span class="text-[11px] text-white/40 font-normal">已完成 <span id="questDoneCount">0/5</span></span></h2>
+        <div id="questList" class="flex flex-col gap-2"></div>
+      </section>
+
       <!-- 摄像头开关 -->
       <section class="flex items-center justify-between">
         <h2 class="font-bold text-white/80">📷 摄像头</h2>
@@ -418,6 +424,7 @@
       // —— 成就 & 挑战 ——
       unlockedAch: [],        // 已解锁成就 id
       celebrated: [],         // 本局已庆祝的分数里程碑
+      quests: null,           // 每日目标系统（initQuests 初始化）
       challenge: { active: false, timeLeft: 60, score: 0, spawnTimer: 0, best: 0, scores: [] },
     };
 
@@ -801,7 +808,7 @@
     }
 
     // 切换场景
-    function setScene(name) {
+    function setScene(name, fromUser) {
       state.scene = name;
       state.objects = name === 'office' ? buildOffice() : buildRoom();
       state.particles = [];
@@ -813,6 +820,7 @@
       refreshObjectSelect();
       updateTargetUI();
       if (typeof highlightMat === 'function') highlightMat(null); // 清除残留材质高亮
+      if (fromUser) questAdd('scene', 1); // 仅用户主动切换计入每日目标
     }
 
     // 获取选中对象
@@ -1228,6 +1236,7 @@
       state.breakCount++;
       updateBreakUI();
       state.totalBreak++;
+      questAdd('break', 1);
       addScore(o.kind === 'person' ? 30 : 50, o.x, o.y - o.h / 2);
       addRage(o.base ? 0 : 20);
       Store.save({ totalBreak: state.totalBreak, bestCombo: state.bestCombo });
@@ -1258,6 +1267,7 @@
       state.comboTime = now;
       if (state.combo > state.bestCombo) state.bestCombo = state.combo;
       updateComboUI();
+      questMax('combo', state.combo);
       if (state.combo > 1) Sound.comboTier(state.combo);
       if (state.combo > 1 && state.combo % 5 === 0) spawnFloater(CANVAS_W / 2, 240, '🔥 ' + state.combo + ' 连击!', '#fb923c');
     }
@@ -1266,6 +1276,7 @@
     function addScore(base, x, y) {
       const gain = Math.round(base * (1 + state.combo * 0.1));
       state.score += gain;
+      questAdd('score', gain);
       updateScoreUI();
       if (state.challenge.active) { state.challenge.score += gain; updateChallengeUI(); }
       spawnFloater(x, y, '+' + gain, '#34d399');
@@ -1311,6 +1322,7 @@
     function triggerBerserk() {
       state.berserk = true;
       state._berserkSeen = true;
+      questAdd('berserk', 1);
       state.berserkUntil = performance.now() + 3500;
       Sound.roar();
       Sound.battle();
@@ -1593,6 +1605,75 @@
       if (state.challenge.spawnTimer <= 0) { spawnChallengeTarget(); state.challenge.spawnTimer = 1.8; }
       if (state.challenge.timeLeft <= 0) { state.challenge.timeLeft = 0; endChallenge(); }
       updateChallengeUI();
+    }
+
+    // ============================================================
+    // 【每日目标系统】每天随机一组小任务，完成打钩，跨天自动重置
+    // ============================================================
+    const QUEST_DEFS = [
+      { id: 'break15',   name: '摧毁 15 个',  icon: '🔨', key: 'break',   target: 15 },
+      { id: 'combo12',   name: '达成 12 连击', icon: '🔥', key: 'combo',   target: 12 },
+      { id: 'score2000', name: '累计 2000 分', icon: '🎯', key: 'score',   target: 2000 },
+      { id: 'scene3',    name: '切换 3 次场景', icon: '🔀', key: 'scene',   target: 3 },
+      { id: 'berserk1',  name: '进入狂暴 1 次', icon: '😡', key: 'berserk', target: 1 },
+    ];
+    function todayKey() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+    function initQuests() {
+      const s = Store.load();
+      if (s.quests && s.quests.date === todayKey() && s.quests.c) {
+        state.quests = s.quests;
+      } else {
+        state.quests = { date: todayKey(), c: { break: 0, combo: 0, score: 0, scene: 0, berserk: 0 }, done: [] };
+        Store.save({ quests: state.quests });
+      }
+    }
+    function questAdd(key, amount) {
+      if (!state.quests || !state.quests.c) return;
+      state.quests.c[key] = (state.quests.c[key] || 0) + amount;
+      checkQuests();
+    }
+    function questMax(key, value) {
+      if (!state.quests || !state.quests.c) return;
+      state.quests.c[key] = Math.max(state.quests.c[key] || 0, value);
+      checkQuests();
+    }
+    function checkQuests() {
+      if (!state.quests) return;
+      let changed = false;
+      for (const def of QUEST_DEFS) {
+        if (state.quests.done.includes(def.id)) continue;
+        if ((state.quests.c[def.key] || 0) >= def.target) { state.quests.done.push(def.id); onQuestDone(def); changed = true; }
+      }
+      Store.save({ quests: state.quests });
+      renderQuests();
+    }
+    function onQuestDone(def) {
+      Sound.unlock();
+      spawnFloater(CANVAS_W / 2, 150, '📋 目标达成：' + def.name, '#a3e635');
+      if (achToastBox) {
+        const el = document.createElement('div');
+        el.className = 'bg-gradient-to-r from-lime-500/90 to-emerald-600/90 rounded-xl px-4 py-2 shadow-lg flex items-center gap-3 max-w-xs';
+        el.innerHTML = `<span style="font-size:24px">${def.icon}</span><div><div class="font-bold text-sm">📋 今日目标完成</div><div class="text-[11px] text-white/80">${def.name}</div></div>`;
+        achToastBox.appendChild(el);
+        setTimeout(() => { el.style.transition = 'opacity .5s, transform .5s'; el.style.opacity = '0'; el.style.transform = 'translateX(40px)'; setTimeout(() => el.remove(), 500); }, 3200);
+      }
+    }
+    function renderQuests() {
+      const box = document.getElementById('questList');
+      if (!box || !state.quests) return;
+      box.innerHTML = QUEST_DEFS.map(def => {
+        const v = Math.min(state.quests.c[def.key] || 0, def.target);
+        const done = state.quests.done.includes(def.id);
+        const pct = Math.round(v / def.target * 100);
+        return `<div class="flex items-center gap-2">` +
+          `<span class="w-5 text-center">${done ? '✅' : def.icon}</span>` +
+          `<div class="flex-1">` +
+            `<div class="flex justify-between text-[11px] ${done ? 'text-lime-300' : 'text-white/70'}"><span class="${done ? 'line-through' : ''}">${def.name}</span><span>${v}/${def.target}</span></div>` +
+            `<div class="h-1.5 bg-black/40 rounded-full overflow-hidden mt-0.5"><div class="h-full ${done ? 'bg-lime-400' : 'bg-orange-500'}" style="width:${pct}%"></div></div>` +
+          `</div></div>`;
+      }).join('');
+      const qc = document.getElementById('questDoneCount');
+      if (qc) qc.textContent = state.quests.done.length + '/' + QUEST_DEFS.length;
     }
 
     // ============================================================
@@ -2128,7 +2209,7 @@
 
     // 场景切换
     document.querySelectorAll('.scene-btn').forEach(b => b.addEventListener('click', () => {
-      setScene(b.dataset.scene);
+      setScene(b.dataset.scene, true);
       document.querySelectorAll('.scene-btn').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
     }));
@@ -2193,7 +2274,7 @@
     window.addEventListener('keydown', (e) => {
       if (e.key === 'd' || e.key === 'D') { dbgVisible = !dbgVisible; return; }
       // Q 快速切换场景
-      if (e.key === 'q' || e.key === 'Q') { const next = state.scene === 'office' ? 'room' : 'office'; setScene(next); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
+      if (e.key === 'q' || e.key === 'Q') { const next = state.scene === 'office' ? 'room' : 'office'; setScene(next, true); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
       // 键盘 1-6 模拟手势
       const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
       if (simMap[e.key]) { simGesture(simMap[e.key]); }
@@ -2327,6 +2408,7 @@
     })();
 
     updateAchCountUI();   // 初始成就计数
+    initQuests(); renderQuests();   // 每日目标：初始化并渲染
     // 小屏提示条 6 秒后自动淡出
     (function autoHideHint() {
       const h = document.getElementById('smallScreenHint');
