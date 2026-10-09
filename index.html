@@ -417,6 +417,7 @@
       bodyOnStage: false,     // 是否将人体骨架叠加到主场景
       // —— 成就 & 挑战 ——
       unlockedAch: [],        // 已解锁成就 id
+      celebrated: [],         // 本局已庆祝的分数里程碑
       challenge: { active: false, timeLeft: 60, score: 0, spawnTimer: 0, best: 0, scores: [] },
     };
 
@@ -716,6 +717,11 @@
           sctx.beginPath();
           sctx.moveTo(0, -p.h); sctx.lineTo(p.w, p.h); sctx.lineTo(-p.w * 0.6, p.h * 0.4);
           sctx.closePath(); sctx.fill();
+        } else if (p.shape === 'confetti') {
+          // 彩带纸屑：旋转时宽度摆动模拟飘动Flutter
+          sctx.fillStyle = p.color;
+          const fx = p.w * (0.3 + 0.7 * Math.abs(Math.cos(p.rot)));
+          sctx.fillRect(-fx / 2, -p.h / 2, fx, p.h);
         } else {
           sctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
         }
@@ -1254,7 +1260,34 @@
       updateScoreUI();
       if (state.challenge.active) { state.challenge.score += gain; updateChallengeUI(); }
       spawnFloater(x, y, '+' + gain, '#34d399');
+      // 分数里程碑庆祝（首次跨阈值时撒彩带）
+      for (const ms of SCORE_MILESTONES) {
+        if (state.score >= ms && !state.celebrated.includes(ms)) { state.celebrated.push(ms); celebrateMilestone(ms); break; }
+      }
       checkAchievements();
+    }
+
+    // —— 分数里程碑彩带庆祝 ——
+    const SCORE_MILESTONES = [500, 1000, 2000, 5000, 10000, 20000, 50000];
+    const CONFETTI_COLORS = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#f472b6'];
+    function spawnConfetti(cx) {
+      const n = lowPerf ? 18 : 50;
+      for (let i = 0; i < n; i++) {
+        state.particles.push({
+          x: cx + rand(-320, 320), y: rand(-20, 40),
+          vx: rand(-60, 60), vy: rand(40, 160),
+          rot: rand(0, 6.28), vr: rand(-8, 8),
+          w: rand(6, 12), h: rand(8, 16),
+          color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+          life: 1, decay: 0.32, shape: 'confetti',
+        });
+      }
+    }
+    function celebrateMilestone(ms) {
+      spawnFloater(CANVAS_W / 2, 200, '🎉 ' + ms + ' 分达成！', '#fbbf24');
+      spawnConfetti(CANVAS_W / 2);
+      Sound.unlock();
+      state.shake = Math.max(state.shake, 8);
     }
 
     // 愤怒值：充满则进入狂暴模式
@@ -1495,6 +1528,7 @@
       state.challenge.score = 0;
       state.challenge.spawnTimer = 0;
       state.score = 0; updateScoreUI();
+      state.celebrated = [];
       state.breakCount = 0; updateBreakUI();
       if (challengeBarEl) { challengeBarEl.classList.remove('hidden'); challengeBarEl.classList.add('flex'); }
       const btn = document.getElementById('challengeBtn'); if (btn) btn.textContent = '⏱ 挑战进行中…';
@@ -2128,6 +2162,7 @@
     const resetMask = document.getElementById('resetMask');
     function doReset() {
       setScene(state.scene); state.breakCount = 0; state.combo = 0; state.score = 0; state.rage = 0; state.berserk = false;
+      state.celebrated = [];
       updateBreakUI(); updateComboUI(); updateScoreUI(); updateRageUI();
       spawnFloater(CANVAS_W / 2, 200, '✅ 场景已重置', '#86efac');
     }
