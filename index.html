@@ -225,6 +225,7 @@
           <input id="bodyStageToggle" type="checkbox" class="w-5 h-5 accent-orange-500" />
         </label>
         <button id="challengeBtn" class="bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 text-sm font-bold">⏱ 开始 60 秒挑战</button>
+        <button id="lbBtn" class="bg-sky-600 hover:bg-sky-500 rounded-lg py-2 text-sm font-bold">🏅 排行榜 Top5</button>
         <p class="text-[11px] text-white/40">成就：已解锁 <span id="achCount">0</span>/<span id="achTotal">0</span>　<button id="achListBtn" class="underline">查看</button></p>
         <button id="dbgToggleBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">🔧 调试面板：开 (D)</button>
         <p class="text-[11px] text-white/40 mt-1">无摄像头？按键盘 1-6 模拟手势：</p>
@@ -307,6 +308,15 @@
     </div>
   </div>
 
+  <!-- ================= 排行榜弹窗 ================= -->
+  <div id="lbMask" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="max-w-md w-full bg-[#1b2130] rounded-2xl border border-white/10 p-7 shadow-2xl">
+      <div class="text-center mb-4"><div class="text-4xl">🏅</div><h3 class="text-xl font-black text-amber-400 mt-1">挑战排行榜</h3><p class="text-xs text-white/50">本地最佳 60 秒成绩 Top5</p></div>
+      <div id="lbList" class="space-y-2 mb-5"></div>
+      <button id="lbCloseBtn" class="w-full bg-orange-500 hover:bg-orange-400 rounded-xl py-2.5 font-bold">关闭</button>
+    </div>
+  </div>
+
   <!-- ================= 应用逻辑（模块化） ================= -->
   <script>
     "use strict";
@@ -369,7 +379,7 @@
       bodyOnStage: false,     // 是否将人体骨架叠加到主场景
       // —— 成就 & 挑战 ——
       unlockedAch: [],        // 已解锁成就 id
-      challenge: { active: false, timeLeft: 60, score: 0, spawnTimer: 0, best: 0 },
+      challenge: { active: false, timeLeft: 60, score: 0, spawnTimer: 0, best: 0, scores: [] },
     };
 
     // 交互用：当前被"抓住"拖动的对象（鼠标或手势共用）
@@ -1459,6 +1469,13 @@
       if (challengeBarEl) { challengeBarEl.classList.add('hidden'); challengeBarEl.classList.remove('flex'); }
       const btn = document.getElementById('challengeBtn'); if (btn) btn.textContent = '⏱ 开始 60 秒挑战';
       if (state.challenge.score > (state.challenge.best || 0)) { state.challenge.best = state.challenge.score; Store.save({ challengeBest: state.challenge.best }); }
+      // 写入本地排行榜（Top5，按分数降序）
+      if (state.challenge.score > 0) {
+        state.challenge.scores.push({ score: state.challenge.score, breaks: state.breakCount, combo: state.bestCombo, date: new Date().toLocaleDateString('zh-CN') });
+        state.challenge.scores.sort((a, b) => b.score - a.score);
+        state.challenge.scores = state.challenge.scores.slice(0, 5);
+        Store.save({ challengeScores: state.challenge.scores });
+      }
       // 展示结果弹窗
       document.getElementById('resScore').textContent = state.challenge.score;
       document.getElementById('resBreak').textContent = state.breakCount;
@@ -2148,6 +2165,17 @@
       const rm = document.getElementById('resultMask'); rm.classList.add('hidden'); rm.classList.remove('flex');
       setScene(state.scene); // 回到自由模式重建场景
     });
+    // 排行榜弹窗
+    const lbMask = document.getElementById('lbMask');
+    function renderLeaderboard() {
+      const list = document.getElementById('lbList');
+      const arr = state.challenge.scores || [];
+      if (!arr.length) { list.innerHTML = '<p class="text-center text-white/40 text-sm py-6">暂无记录，快去挑战吧！</p>'; return; }
+      const medal = ['🥇', '🥈', '🥉', '4.', '5.'];
+      list.innerHTML = arr.map((r, i) => `<div class="flex items-center gap-2 bg-white/5 rounded-lg px-4 py-2"><span class="font-bold text-amber-300 w-8">${medal[i] || (i + 1)}</span><span class="text-emerald-400 font-black">${r.score} 分</span><span class="text-[11px] text-white/50 flex-1 text-right">摧毁${r.breaks} · ${r.combo}连 · ${r.date || ''}</span></div>`).join('');
+    }
+    document.getElementById('lbBtn').addEventListener('click', () => { Sound.click(); renderLeaderboard(); lbMask.classList.remove('hidden'); lbMask.classList.add('flex'); });
+    document.getElementById('lbCloseBtn').addEventListener('click', () => { lbMask.classList.add('hidden'); lbMask.classList.remove('flex'); });
 
     // ============================================================
     // 【启动】
@@ -2171,6 +2199,7 @@
       if (typeof s.musicOn === 'boolean') { state.musicOn = s.musicOn; document.getElementById('musicToggle').checked = s.musicOn; /* 音乐需用户手势启动，此处仅同步开关态，不自动播放 */ }
       if (Array.isArray(s.unlockedAch)) state.unlockedAch = s.unlockedAch.slice();
       if (typeof s.challengeBest === 'number') state.challenge.best = s.challengeBest;
+      if (Array.isArray(s.challengeScores)) state.challenge.scores = s.challengeScores.slice();
       if (s.light) {
         Object.assign(state.light, s.light);
         document.getElementById('lightSlider').value = state.light.intensity;
