@@ -174,6 +174,11 @@
           <span class="text-xs text-white/60">环境氛围光</span>
           <input id="ambientToggle" type="checkbox" checked class="w-5 h-5 accent-orange-500" />
         </label>
+        <div class="grid grid-cols-3 gap-2 mt-1">
+          <button data-theme="day" class="theme-btn badge bg-sky-500/20 border border-sky-400/30 rounded-lg py-1.5 text-xs">☀️ 白天</button>
+          <button data-theme="night" class="theme-btn badge bg-indigo-900/40 border border-indigo-400/30 rounded-lg py-1.5 text-xs">🌙 夜晚</button>
+          <button data-theme="disco" class="theme-btn badge bg-fuchsia-600/30 border border-fuchsia-400/40 rounded-lg py-1.5 text-xs">🪩 迪斯科</button>
+        </div>
       </section>
 
       <!-- 材质设置 -->
@@ -343,6 +348,7 @@
       transition: 0,          // 场景切换过渡黑幕强度 0~1
       ambient: [],            // 环境漂浮粒子（尘埃/雪花）
       light: { intensity: 70, warm: true, ambient: true },
+      theme: 'day',            // 场景主题皮肤 day | night | disco
       muted: false,
       volume: 0.9,            // 主音量 0~1
       musicOn: false,         // 背景氛围乐开关
@@ -1036,7 +1042,7 @@
     }
     // 更新与绘制环境粒子（循环从顶部飘下）
     function updateDrawAmbient(dt) {
-      const col = state.scene === 'office' ? '255,255,255' : '226,232,240';
+      const col = (THEMES[state.theme] || THEMES.day).ambient;
       for (const p of state.ambient) {
         p.x += p.vx * dt; p.y += p.vy * dt;
         if (p.y > CANVAS_H) { p.y = -6; p.x = rand(0, CANVAS_W); }
@@ -1049,15 +1055,22 @@
     // ============================================================
     // 【灯光材质模块】背景绘制 + 实时光照氛围叠加
     // ============================================================
+    // 场景主题皮肤：控制墙面/地板/环境粒子基调色（随主题联动）
+    const THEMES = {
+      day:   { office: ['#dbeafe', '#bfdbfe'], room: ['#e5e7eb', '#cbd5e1'], floorO: '#94a3b8', floorR: '#9ca3af', ambient: '255,255,255' },
+      night: { office: ['#1e293b', '#0f172a'], room: ['#111827', '#0b1120'], floorO: '#334155', floorR: '#374151', ambient: '148,163,184' },
+      disco: { office: ['#312e81', '#1e1b4b'], room: ['#3b0764', '#1e1b4b'], floorO: '#4c1d95', floorR: '#4a044e', ambient: '255,255,255' },
+    };
     function drawBackground() {
+      const T = THEMES[state.theme] || THEMES.day;
+      const stops = state.scene === 'office' ? T.office : T.room;
       // 墙面
       const wall = sctx.createLinearGradient(0, 0, 0, CANVAS_H);
-      if (state.scene === 'office') { wall.addColorStop(0, '#dbeafe'); wall.addColorStop(1, '#bfdbfe'); }
-      else { wall.addColorStop(0, '#e5e7eb'); wall.addColorStop(1, '#cbd5e1'); }
+      wall.addColorStop(0, stops[0]); wall.addColorStop(1, stops[1]);
       sctx.fillStyle = wall;
       sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       // 地板
-      sctx.fillStyle = state.scene === 'office' ? '#94a3b8' : '#9ca3af';
+      sctx.fillStyle = state.scene === 'office' ? T.floorO : T.floorR;
       sctx.fillRect(0, 560, CANVAS_W, CANVAS_H - 560);
       sctx.fillStyle = 'rgba(0,0,0,.06)';
       for (let x = 0; x < CANVAS_W; x += 80) sctx.fillRect(x, 560, 2, CANVAS_H - 560);
@@ -1115,6 +1128,23 @@
       const vg = sctx.createRadialGradient(CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.35, CANVAS_W / 2, CANVAS_H / 2, CANVAS_H * 0.85);
       vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.35)');
       sctx.fillStyle = vg; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      // 主题特效：迪斯科旋转彩色光束；夜晚冷色压暗
+      if (state.theme === 'disco') {
+        const tt = performance.now() / 1000;
+        sctx.globalCompositeOperation = 'lighter';
+        for (let k = 0; k < 4; k++) {
+          const hue = (tt * 60 + k * 90) % 360;
+          const cx = CANVAS_W / 2 + Math.cos(tt * 1.2 + k) * 420;
+          const cy = 240 + Math.sin(tt * 1.6 + k) * 130;
+          const g = sctx.createRadialGradient(cx, cy, 10, cx, cy, 320);
+          g.addColorStop(0, `hsla(${hue},90%,60%,0.32)`);
+          g.addColorStop(1, 'hsla(0,0%,0%,0)');
+          sctx.fillStyle = g; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+        }
+        sctx.globalCompositeOperation = 'source-over';
+      } else if (state.theme === 'night') {
+        sctx.fillStyle = 'rgba(30,58,138,0.18)'; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      }
       sctx.restore();
     }
 
@@ -2010,6 +2040,15 @@
     coolBtn.addEventListener('click', () => setLightWarm(false));
     // 环境光
     document.getElementById('ambientToggle').addEventListener('change', (e) => { state.light.ambient = e.target.checked; Store.save({ light: state.light }); });
+    // 主题皮肤（白天/夜晚/迪斯科）
+    const themeBtns = document.querySelectorAll('.theme-btn');
+    function setTheme(t) {
+      if (!THEMES[t]) t = 'day';
+      state.theme = t;
+      themeBtns.forEach(b => b.classList.toggle('active', b.dataset.theme === t));
+      Store.save({ theme: t });
+    }
+    themeBtns.forEach(b => b.addEventListener('click', () => { Sound.click(); setTheme(b.dataset.theme); }));
     // 材质
     const matBtns = document.querySelectorAll('.mat-btn');
     function highlightMat(mat) { matBtns.forEach(b => b.classList.toggle('active', b.dataset.mat === mat)); }
@@ -2139,6 +2178,7 @@
         document.getElementById('ambientToggle').checked = state.light.ambient;
         setLightWarm(state.light.warm);
       }
+      if (typeof s.theme === 'string' && THEMES[s.theme]) setTheme(s.theme); else setTheme('day');
     })();
 
     // —— 引导遮罩：首次（或上次未“不再显示”）进入时展示 ——
