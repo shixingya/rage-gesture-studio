@@ -99,6 +99,7 @@
         </div>
         <div class="flex items-center gap-2">
           <span class="bg-black/40 rounded-full px-3 py-1 text-xs" id="uiGesture">手势：待机</span>
+          <button id="helpBtn" class="bg-white/15 hover:bg-white/25 rounded-full w-8 h-8 text-sm font-bold pointer-events-auto" title="操作说明 (?)">?</button>
         </div>
       </div>
 
@@ -314,6 +315,43 @@
       <div class="text-center mb-4"><div class="text-4xl">🏅</div><h3 class="text-xl font-black text-amber-400 mt-1">挑战排行榜</h3><p class="text-xs text-white/50">本地最佳 60 秒成绩 Top5</p></div>
       <div id="lbList" class="space-y-2 mb-5"></div>
       <button id="lbCloseBtn" class="w-full bg-orange-500 hover:bg-orange-400 rounded-xl py-2.5 font-bold">关闭</button>
+    </div>
+  </div>
+
+  <!-- ================= 帮助浮层 ================= -->
+  <div id="helpMask" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="max-w-2xl w-full bg-[#1b2130] rounded-2xl border border-white/10 p-7 shadow-2xl max-h-[85vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-xl font-black text-amber-400">❓ 操作说明</h3>
+        <button id="helpCloseBtn" class="bg-white/10 hover:bg-white/20 rounded-lg w-8 h-8">✕</button>
+      </div>
+      <div class="grid md:grid-cols-2 gap-5 text-sm">
+        <div>
+          <h4 class="font-bold text-white/80 mb-2">⌨️ 键盘快捷键</h4>
+          <ul class="space-y-1.5 text-white/70">
+            <li><b class="text-amber-300">1</b> 出拳 · <b class="text-amber-300">2</b> 抛掷 · <b class="text-amber-300">3</b> 下拍</li>
+            <li><b class="text-amber-300">4</b> 前推 · <b class="text-amber-300">5</b> 横扫 · <b class="text-amber-300">6</b> 吓唬</li>
+            <li><b class="text-amber-300">Q</b> 切换场景</li>
+            <li><b class="text-amber-300">D</b> 开关调试面板</li>
+            <li><b class="text-amber-300">? / H</b> 开关本说明</li>
+            <li><b class="text-amber-300">Esc</b> 关闭弹窗</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-white/80 mb-2">🖱️ 鼠标 / 触屏</h4>
+          <ul class="space-y-1.5 text-white/70">
+            <li>单击物体 = 选中目标</li>
+            <li>双击 / 双 tap = 击打</li>
+            <li>按住拖拽后快速甩开 = 抛出破碎</li>
+          </ul>
+          <h4 class="font-bold text-white/80 mb-2 mt-4">👤 手势（需摄像头）</h4>
+          <ul class="space-y-1.5 text-white/70">
+            <li>握拳挥拳 · 捏合抓取甩出 · 张掌下拍</li>
+            <li>手掌前推 · 双手横扫 · 张掌靠近吓唬</li>
+          </ul>
+        </div>
+      </div>
+      <p class="text-[11px] text-white/40 mt-5">💾 所有设置、成就与排行榜成绩均自动保存在本地浏览器。</p>
     </div>
   </div>
 
@@ -2108,6 +2146,9 @@
       // 键盘 1-6 模拟手势
       const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
       if (simMap[e.key]) { simGesture(simMap[e.key]); }
+      // ? / H 开关帮助；Esc 关闭弹窗
+      if (e.key === '?' || e.key === 'h' || e.key === 'H') { toggleHelp(); }
+      if (e.key === 'Escape') { closeAllMasks(); }
     });
     // 模拟手势按钮
     document.querySelectorAll('.sim-btn').forEach(b => b.addEventListener('click', () => simGesture(b.dataset.sim)));
@@ -2176,6 +2217,17 @@
     }
     document.getElementById('lbBtn').addEventListener('click', () => { Sound.click(); renderLeaderboard(); lbMask.classList.remove('hidden'); lbMask.classList.add('flex'); });
     document.getElementById('lbCloseBtn').addEventListener('click', () => { lbMask.classList.add('hidden'); lbMask.classList.remove('flex'); });
+    // 帮助浮层
+    const helpMask = document.getElementById('helpMask');
+    function toggleHelp() {
+      const open = helpMask.classList.contains('hidden');
+      helpMask.classList.toggle('hidden', !open); helpMask.classList.toggle('flex', open);
+    }
+    function closeAllMasks() {
+      [helpMask, lbMask, resetMask, document.getElementById('resultMask')].forEach(m => { if (m) { m.classList.add('hidden'); m.classList.remove('flex'); } });
+    }
+    document.getElementById('helpBtn').addEventListener('click', toggleHelp);
+    document.getElementById('helpCloseBtn').addEventListener('click', toggleHelp);
 
     // ============================================================
     // 【启动】
