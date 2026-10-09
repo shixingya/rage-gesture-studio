@@ -2289,7 +2289,7 @@
     window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); if (state.musicOn && !Sound.isMusicPlaying()) Sound.startMusic(); }, { once: false });
     // 按 D 键切换调试面板
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'd' || e.key === 'D') { dbgVisible = !dbgVisible; return; }
+      if (e.key === 'd' || e.key === 'D') { dbgVisible = !dbgVisible; const b = document.getElementById('dbgToggleBtn'); if (b) b.textContent = dbgVisible ? '🔧 调试面板：开 (D)' : '🔧 调试面板：关 (D)'; return; }
       // Q 快速切换场景
       if (e.key === 'q' || e.key === 'Q') { const next = state.scene === 'office' ? 'room' : 'office'; setScene(next, true); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
       // 键盘 1-6 模拟手势
