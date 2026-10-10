@@ -1,5 +1,10 @@
 # 😤 Rage Gesture Studio · 手势宣泄室
 
+[![Online Demo](https://img.shields.io/badge/🎮_在线体验-shixingya.github.io-orange)](https://shixingya.github.io/rage-gesture-studio/) [![Deploy](https://github.com/shixingya/rage-gesture-studio/actions/workflows/deploy.yml/badge.svg)](https://github.com/shixingya/rage-gesture-studio/actions/workflows/deploy.yml)
+
+> 🎮 **在线体验（点开即玩，无需下载）**：<https://shixingya.github.io/rage-gesture-studio/>
+> 通过 https 安全上下文访问，摄像头手势识别可直接启用（比本地 `file://` 双击更完整）。
+
 一个**单 HTML 文件、纯前端**的虚拟情绪发泄小游戏。调用电脑摄像头，用**手势**砸办公室物品、揍卡通老板，或切到空发泄房甩玻璃瓶、拍盘子——卡通画风、无血腥写实，只为了让你笑着把压力发泄出去。
 
 > ⚠️ 本程序仅为虚拟趣味情绪释放工具，请勿模仿现实破坏与暴力行为。
