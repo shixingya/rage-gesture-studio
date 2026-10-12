@@ -345,7 +345,24 @@
         <div class="bg-white/5 rounded-lg p-3"><div class="text-xs text-white/50">最高连击</div><div id="resCombo" class="text-2xl font-black text-orange-400">0</div></div>
         <div class="bg-white/5 rounded-lg p-3"><div class="text-xs text-white/50">历史最佳</div><div id="resBest" class="text-2xl font-black text-sky-400">0</div></div>
       </div>
-      <button id="resultCloseBtn" class="w-full bg-orange-500 hover:bg-orange-400 rounded-xl py-2.5 font-bold">返回自由模式</button>
+      <div class="flex gap-3">
+        <button id="shareCardBtn" class="flex-1 bg-sky-600 hover:bg-sky-500 rounded-xl py-2.5 font-bold">📤 分享成绩卡</button>
+        <button id="resultCloseBtn" class="flex-1 bg-orange-500 hover:bg-orange-400 rounded-xl py-2.5 font-bold">返回自由模式</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 成绩卡分享弹窗 ================= -->
+  <div id="shareCardMask" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="max-w-sm w-full bg-[#1b2130] rounded-2xl border border-white/10 p-5 shadow-2xl text-center">
+      <h3 class="text-lg font-black text-amber-400 mb-3">📤 我的战绩</h3>
+      <img id="shareCardImg" class="mx-auto rounded-lg shadow-lg max-h-[52vh] w-auto" alt="成绩卡" />
+      <div class="flex gap-2 mt-4">
+        <button id="shareDownloadBtn" class="flex-1 bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 font-bold">⬇ 下载</button>
+        <button id="shareCopyBtn" class="flex-1 bg-sky-600 hover:bg-sky-500 rounded-xl py-2.5 font-bold">📋 复制</button>
+        <button id="shareCloseBtn" class="bg-white/10 hover:bg-white/20 rounded-xl px-4">关闭</button>
+      </div>
+      <p id="shareHint" class="text-[11px] text-white/40 mt-2">图片在本地生成，不上传任何服务器</p>
     </div>
   </div>
 
@@ -1621,6 +1638,85 @@
       document.getElementById('resBest').textContent = state.challenge.best || 0;
       const rm = document.getElementById('resultMask'); rm.classList.remove('hidden'); rm.classList.add('flex');
     }
+
+    // ============================================================
+    // 【分享成绩卡】本地用离屏 canvas 绘一张竖版战绩图，支持下载/复制
+    // ============================================================
+    const THEME_LABEL = { day: '☀️ 白天', night: '🌙 夜晚', disco: '🪩 迪斯科' };
+    function rrPath(ctx, x0, y0, w, h, r) {
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(x0, y0, w, h, r); return; }
+      ctx.moveTo(x0 + r, y0);
+      ctx.arcTo(x0 + w, y0, x0 + w, y0 + h, r);
+      ctx.arcTo(x0 + w, y0 + h, x0, y0 + h, r);
+      ctx.arcTo(x0, y0 + h, x0, y0, r);
+      ctx.arcTo(x0, y0, x0 + w, y0, r);
+      ctx.closePath();
+    }
+    function buildShareCard() {
+      const W = 640, H = 800;
+      const c = document.createElement('canvas'); c.width = W; c.height = H;
+      const x = c.getContext('2d');
+      const FONT = 'system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
+      const g = x.createLinearGradient(0, 0, W, H);
+      g.addColorStop(0, '#1e293b'); g.addColorStop(1, '#0b1120');
+      x.fillStyle = g; x.fillRect(0, 0, W, H);
+      const hg = x.createLinearGradient(0, 0, W, 0);
+      hg.addColorStop(0, '#f97316'); hg.addColorStop(1, '#ef4444');
+      x.fillStyle = hg; x.fillRect(0, 0, W, 10);
+      x.textAlign = 'center'; x.fillStyle = '#fbbf24'; x.font = 'bold 40px ' + FONT;
+      x.fillText('😤 手势宣泄室', W / 2, 82);
+      x.fillStyle = 'rgba(255,255,255,0.6)'; x.font = '20px ' + FONT;
+      x.fillText('60 秒挑战战绩', W / 2, 116);
+      x.fillStyle = '#34d399'; x.font = 'bold 128px ' + FONT;
+      x.fillText(String(state.challenge.score | 0), W / 2, 268);
+      x.fillStyle = 'rgba(255,255,255,0.5)'; x.font = '22px ' + FONT;
+      x.fillText('本局得分', W / 2, 304);
+      const rows = [
+        ['摧毁数量', state.breakCount + ' 个', '#f87171'],
+        ['最高连击', state.bestCombo + ' 连', '#fb923c'],
+        ['历史最佳', (state.challenge.best | 0) + ' 分', '#38bdf8'],
+        ['场景主题', THEME_LABEL[state.theme] || state.theme, '#a78bfa'],
+      ];
+      let yy = 372;
+      rows.forEach(r => {
+        x.fillStyle = 'rgba(255,255,255,0.06)'; rrPath(x, 60, yy, W - 120, 66, 14); x.fill();
+        x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,0.65)'; x.font = '22px ' + FONT;
+        x.fillText(r[0], 84, yy + 42);
+        x.textAlign = 'right'; x.fillStyle = r[2]; x.font = 'bold 28px ' + FONT;
+        x.fillText(String(r[1]), W - 84, yy + 43);
+        yy += 80;
+      });
+      x.textAlign = 'center'; x.fillStyle = 'rgba(255,255,255,0.45)'; x.font = '18px ' + FONT;
+      const d = new Date();
+      x.fillText(d.toLocaleDateString('zh-CN') + ' · ' + d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }), W / 2, H - 70);
+      x.fillStyle = '#f97316'; x.font = 'bold 20px ' + FONT;
+      x.fillText('shixingya.github.io', W / 2, H - 38);
+      return c;
+    }
+    function openShareCard() {
+      const c = buildShareCard();
+      document.getElementById('shareCardImg').src = c.toDataURL('image/png');
+      window.__shareCanvas = c;
+      const hint = document.getElementById('shareHint'); if (hint) hint.textContent = '图片在本地生成，不上传任何服务器';
+      const m = document.getElementById('shareCardMask'); m.classList.remove('hidden'); m.classList.add('flex');
+    }
+    function downloadShareCard() {
+      const c = window.__shareCanvas; if (!c) return;
+      const a = document.createElement('a');
+      a.download = 'rage-gesture-card-' + Date.now() + '.png';
+      a.href = c.toDataURL('image/png'); a.click();
+    }
+    async function copyShareCard() {
+      const c = window.__shareCanvas; const hint = document.getElementById('shareHint'); if (!c) return;
+      try {
+        const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        if (hint) hint.textContent = '✅ 已复制到剪贴板，可直接粘贴分享';
+      } catch (e) {
+        if (hint) hint.textContent = '⚠️ 当前浏览器不支持一键复制图片，请点“下载”保存后再分享';
+      }
+    }
     // 随机生成一个挑战目标（限制场上数量，直接落位静置供击打）
     function spawnChallengeTarget() {
       const live = state.objects.filter(o => !o.base && o.state !== 'broken');
@@ -2377,7 +2473,15 @@
     // 挑战结果关闭
     document.getElementById('resultCloseBtn').addEventListener('click', () => {
       const rm = document.getElementById('resultMask'); rm.classList.add('hidden'); rm.classList.remove('flex');
+      const sc = document.getElementById('shareCardMask'); if (sc) { sc.classList.add('hidden'); sc.classList.remove('flex'); }
       setScene(state.scene); // 回到自由模式重建场景
+    });
+    // 成绩卡分享（本地生成 PNG，下载/复制）
+    document.getElementById('shareCardBtn').addEventListener('click', openShareCard);
+    document.getElementById('shareDownloadBtn').addEventListener('click', downloadShareCard);
+    document.getElementById('shareCopyBtn').addEventListener('click', copyShareCard);
+    document.getElementById('shareCloseBtn').addEventListener('click', () => {
+      const m = document.getElementById('shareCardMask'); m.classList.add('hidden'); m.classList.remove('flex');
     });
     // 排行榜弹窗
     const lbMask = document.getElementById('lbMask');
@@ -2397,7 +2501,7 @@
       helpMask.classList.toggle('hidden', !open); helpMask.classList.toggle('flex', open);
     }
     function closeAllMasks() {
-      [helpMask, lbMask, resetMask, document.getElementById('resultMask')].forEach(m => { if (m) { m.classList.add('hidden'); m.classList.remove('flex'); } });
+      [helpMask, lbMask, resetMask, document.getElementById('resultMask'), document.getElementById('shareCardMask')].forEach(m => { if (m) { m.classList.add('hidden'); m.classList.remove('flex'); } });
     }
     document.getElementById('helpBtn').addEventListener('click', toggleHelp);
     document.getElementById('helpCloseBtn').addEventListener('click', toggleHelp);
