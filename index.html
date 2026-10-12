@@ -151,6 +151,10 @@
       <div>
         <h1 class="text-lg font-black text-amber-400">😤 手势宣泄室</h1>
         <p class="text-xs text-white/50 mt-1">挥拳 · 甩物 · 拍打 · 横扫，安全发泄</p>
+        <div class="mt-2 flex flex-wrap gap-1.5">
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/25">🔒 本地运行不上传</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/50 border border-white/10">断网可玩</span>
+        </div>
       </div>
 
       <!-- 对象选择 -->
@@ -285,19 +289,36 @@
   <!-- ================= 首屏引导遮罩 ================= -->
   <div id="introMask" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
     <div class="max-w-lg w-full bg-[#1b2130] rounded-2xl border border-white/10 p-7 shadow-2xl">
-      <h2 class="text-2xl font-black text-amber-400 mb-1">😤 欢迎来到手势宣泄室</h2>
-      <p class="text-sm text-white/60 mb-4">用手势把虚拟对象打、扔、扫、砸个精光，安全地释放情绪！</p>
-      <ul class="text-sm space-y-2 mb-5">
-        <li>👊 <b>握拳</b> → 连续击打</li>
-        <li>🤏 <b>捏合</b> → 抓起并甩出</li>
-        <li>🖐️ <b>张掌下拍/前推/横扫/吓唬</b> → 多种破坏</li>
-        <li>🖱️ 没摄像头？<b>鼠标拖拽/双击</b>或右侧 <b>1-6 模拟按钮</b>照样发泄</li>
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="text-2xl font-black text-amber-400">😤 欢迎来到手势宣泄室</h2>
+        <span class="text-[11px] px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 whitespace-nowrap">🔒 全程本地运行</span>
+      </div>
+      <p class="text-base font-semibold text-white/85 mb-1">30 秒，把今天的压力砸个精光 💥</p>
+      <p class="text-xs text-white/55 mb-4">用手势或鼠标砸虚拟物品、揍卡通老板——画面只在你电脑上处理，<b>不上传任何云端</b>，断网也能玩。</p>
+      <div class="grid grid-cols-4 gap-2 mb-4 text-center">
+        <div class="bg-white/5 rounded-lg py-2"><div id="stGesture" class="text-xl font-black text-amber-400">6</div><div class="text-[10px] text-white/50">手势动作</div></div>
+        <div class="bg-white/5 rounded-lg py-2"><div id="stObject" class="text-xl font-black text-amber-400">14</div><div class="text-[10px] text-white/50">可砸对象</div></div>
+        <div class="bg-white/5 rounded-lg py-2"><div class="text-xl font-black text-amber-400">5</div><div class="text-[10px] text-white/50">材质手感</div></div>
+        <div class="bg-white/5 rounded-lg py-2"><div id="stTheme" class="text-xl font-black text-amber-400">3</div><div class="text-[10px] text-white/50">场景主题</div></div>
+      </div>
+      <ul class="text-sm space-y-1.5 mb-4">
+        <li>👊 <b>握拳</b> 连续击打 · 🤏 <b>捏合</b> 抓起甩出</li>
+        <li>🖐️ <b>张掌</b> 下拍 / 前推 / 横扫 / 吓唬</li>
+        <li>🖱️ 没摄像头？<b>鼠标拖拽 / 双击</b> 或右侧 <b>1–6</b> 照样发泄</li>
       </ul>
-      <label class="flex items-center gap-2 mb-4 text-xs text-white/60">
+      <details class="mb-4 text-xs bg-white/5 rounded-lg p-3">
+        <summary class="cursor-pointer font-bold text-sky-300 select-none">🔬 它是怎么识别手势的？（原理透明化）</summary>
+        <div class="mt-2 text-white/60 space-y-1.5 leading-relaxed">
+          <p>浏览器端 <b>MediaPipe Hands</b> 实时在你的画面上定位 <b>21 个手部关键点</b>（指尖、指根、手腕）。</p>
+          <p>程序用<b>几何启发式</b>判断手势：五指指尖都收拢靠近掌心 → <b>握拳</b>；拇指与食指距离小于阈值 → <b>捏合</b>；手掌整体快速向下位移 → <b>下拍</b>。</p>
+          <p>识别到的姿态映射到与鼠标<b>共用</b>的 act* 动作函数，所以同一套物理与音效对两种输入都生效；全程在本地计算，画面不上传。</p>
+        </div>
+      </details>
+      <label class="flex items-center gap-2 mb-3 text-xs text-white/60">
         <input id="introNoMore" type="checkbox" class="w-4 h-4 accent-orange-500" /> 下次不再显示
       </label>
       <button id="introStartBtn" class="w-full bg-orange-500 hover:bg-orange-400 rounded-xl py-3 font-bold text-lg">🚀 开始发泄</button>
-      <p class="text-[11px] text-white/40 mt-3">⚠️ 启用摄像头建议用本地服务器：python -m http.server 8000</p>
+      <p class="text-[11px] text-white/40 mt-3">⚠️ 双击本地文件时摄像头会被禁用，请用 https 在线版或 <code>python -m http.server 8000</code></p>
     </div>
   </div>
 
@@ -2420,6 +2441,11 @@
     (function setupIntro() {
       const mask = document.getElementById('introMask');
       const noMoreEl = document.getElementById('introNoMore');
+      // 用真实数据结构动态填充能力数字，避免文案与实现漂移
+      const setStat = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = String(v); };
+      setStat('stGesture', document.querySelectorAll('[data-sim]').length);
+      setStat('stObject', Object.keys(SHAPES).length);
+      setStat('stTheme', Object.keys(THEMES).length);
       if (Store.load().hideIntro) mask.style.display = 'none';
       document.getElementById('introStartBtn').addEventListener('click', () => {
         Sound.init(); Sound.resume();
