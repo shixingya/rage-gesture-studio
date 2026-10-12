@@ -164,6 +164,25 @@
         <p class="text-[11px] text-white/40">提示：也可直接点击画面里的物体选中它。</p>
       </section>
 
+      <!-- 出气标签 -->
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold text-white/80">🏷️ 出气标签</h2>
+        <p class="text-[11px] text-white/40">给选中的对象贴个“仇人”名，砸起来更带感。</p>
+        <div class="flex gap-1.5 flex-wrap">
+          <button class="label-preset bg-white/10 hover:bg-white/20 rounded-full px-2.5 py-1 text-xs" data-label="甲方">甲方</button>
+          <button class="label-preset bg-white/10 hover:bg-white/20 rounded-full px-2.5 py-1 text-xs" data-label="前任">前任</button>
+          <button class="label-preset bg-white/10 hover:bg-white/20 rounded-full px-2.5 py-1 text-xs" data-label="老板">老板</button>
+          <button class="label-preset bg-white/10 hover:bg-white/20 rounded-full px-2.5 py-1 text-xs" data-label="内卷">内卷</button>
+          <button class="label-preset bg-white/10 hover:bg-white/20 rounded-full px-2.5 py-1 text-xs" data-label="DDL">DDL</button>
+        </div>
+        <div class="flex gap-2">
+          <input id="labelInput" type="text" maxlength="8" placeholder="自定义…" class="flex-1 min-w-0 bg-[#242b38] rounded-lg px-3 py-2 border border-white/10" />
+          <button id="labelApplyBtn" class="bg-orange-500 hover:bg-orange-400 rounded-lg px-3 text-xs font-bold">贴上</button>
+        </div>
+        <button id="labelClearBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">清除当前标签</button>
+        <p id="labelHint" class="text-[11px] text-white/40"></p>
+      </section>
+
       <!-- 灯光设置 -->
       <section class="flex flex-col gap-3">
         <h2 class="font-bold text-white/80">💡 灯光设置</h2>
@@ -824,6 +843,7 @@
         x: 0, y: 0, w: 80, h: 80, rot: 0,
         vx: 0, vy: 0, vr: 0,
         state: 'idle', anim: 0, face: 'calm', hp: 100, flash: 0, punch: 0,
+        label: null,          // 自定义出气标签（如“甲方”），贴在头顶显示
         removable: true, // 是否可被彻底打碎移除
       }, o);
       obj.homeX = obj.x; obj.homeY = obj.y; // 初始位置（重生用）
@@ -1136,6 +1156,20 @@
         sctx.stroke(); sctx.restore();
       }
       sctx.restore();
+      // 出气标签：贴在对象头顶（屏幕空间，不随旋转）
+      if (o.label && o.state !== 'broken') {
+        const ty = o.y - o.h / 2 - 12 + oy;
+        sctx.save();
+        sctx.font = 'bold 15px system-ui, "PingFang SC", "Microsoft YaHei", sans-serif';
+        const tw = sctx.measureText(o.label).width, pad = 9, bw = tw + pad * 2, bh = 24;
+        sctx.fillStyle = 'rgba(239,68,68,0.94)';
+        if (sctx.roundRect) { sctx.beginPath(); sctx.roundRect(o.x - bw / 2, ty - bh, bw, bh, 8); sctx.fill(); }
+        else sctx.fillRect(o.x - bw / 2, ty - bh, bw, bh);
+        sctx.beginPath(); sctx.moveTo(o.x - 6, ty); sctx.lineTo(o.x + 6, ty); sctx.lineTo(o.x, ty + 7); sctx.closePath(); sctx.fill();
+        sctx.fillStyle = '#fff'; sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
+        sctx.fillText(o.label, o.x, ty - bh / 2);
+        sctx.restore();
+      }
     }
 
     // 根据剩余血量在对象上绘制随机裂纹（固定种子，避免每帧闪烁）
@@ -1292,6 +1326,7 @@
       updateBreakUI();
       state.totalBreak++;
       questAdd('break', 1);
+      if (o.label) spawnFloater(o.x, o.y - o.h / 2 - 34, '💥 砸碎「' + o.label + '」', '#f87171');
       addScore(o.kind === 'person' ? 30 : 50, o.x, o.y - o.h / 2);
       addRage(o.base ? 0 : 20);
       Store.save({ totalBreak: state.totalBreak, bestCombo: state.bestCombo });
@@ -2287,7 +2322,28 @@
       const o = selectedObj();
       uiTarget.textContent = o ? o.name : '未选择';
       if (o) objSelect.value = o.id;
+      refreshLabelUI(o);
     }
+    // —— 出气标签：给选中对象贴自定义标签 ——
+    const labelInput = document.getElementById('labelInput');
+    const labelHint = document.getElementById('labelHint');
+    function refreshLabelUI(o) {
+      if (!labelInput || !labelHint) return;
+      if (o) { labelInput.placeholder = '给「' + o.name + '」贴…'; labelInput.value = o.label || ''; labelHint.textContent = o.label ? ('当前标签：' + o.label) : ''; }
+      else { labelInput.placeholder = '先选中对象…'; labelInput.value = ''; labelHint.textContent = ''; }
+    }
+    function setLabel(text) {
+      const o = selectedObj();
+      if (!o) { if (labelHint) labelHint.textContent = '请先选中一个对象'; return; }
+      const t = String(text || '').trim().slice(0, 8);
+      o.label = t || null;
+      if (labelHint) labelHint.textContent = o.label ? ('已给「' + o.name + '」贴上：' + o.label) : '已清除标签';
+      spawnFloater(o.x, o.y - o.h / 2 - 30, o.label ? '🏷️ ' + o.label : '🏷️ 已清除', '#f87171');
+    }
+    document.getElementById('labelApplyBtn').addEventListener('click', () => setLabel(labelInput.value));
+    labelInput.addEventListener('keydown', e => { if (e.key === 'Enter') setLabel(labelInput.value); });
+    document.getElementById('labelClearBtn').addEventListener('click', () => setLabel(''));
+    document.querySelectorAll('.label-preset').forEach(b => b.addEventListener('click', () => { labelInput.value = b.dataset.label; setLabel(b.dataset.label); }));
     // 刷新对象下拉列表
     function refreshObjectSelect() {
       objSelect.innerHTML = '<option value="">-- 选择目标 --</option>' +
