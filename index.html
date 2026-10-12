@@ -110,6 +110,7 @@
       <div class="absolute top-16 left-4 flex flex-col gap-2 z-20">
         <button data-scene="office" class="scene-btn badge bg-white/15 hover:bg-white/25 rounded-lg px-3 py-2 text-sm text-left">🏢 办公室</button>
         <button data-scene="room" class="scene-btn badge bg-white/15 hover:bg-white/25 rounded-lg px-3 py-2 text-left text-sm">🧱 空发泄房</button>
+        <button data-scene="bedroom" class="scene-btn badge bg-white/15 hover:bg-white/25 rounded-lg px-3 py-2 text-left text-sm">🛏️ 卧室</button>
       </div>
 
       <!-- 成就弹框区（右上角堆叠） -->
@@ -880,10 +881,25 @@
       ];
     }
 
+    // 构建卧室场景（床/衣柜为固定件，其余可砸）
+    function buildBedroom() {
+      const floorY = 560;
+      return [
+        makeObj({ name: '床', shape: 'bed', x: 300, y: floorY - 80, w: 360, h: 160, mat: 'wood', base: true }),
+        makeObj({ name: '衣柜', shape: 'wardrobe', x: 1120, y: floorY - 150, w: 160, h: 300, mat: 'wood', base: true }),
+        makeObj({ name: '闹钟', shape: 'alarm', x: 540, y: floorY - 40, w: 80, h: 80, mat: 'plastic' }),
+        makeObj({ name: '手机', shape: 'phone', x: 660, y: floorY - 55, w: 60, h: 110, mat: 'glass' }),
+        makeObj({ name: '水杯', shape: 'cup', x: 760, y: floorY - 45, w: 60, h: 90, mat: 'glass' }),
+        makeObj({ name: '毛绒熊', shape: 'teddy', x: 880, y: floorY - 70, w: 120, h: 140, mat: 'plastic' }),
+        makeObj({ name: '台灯', shape: 'lamp', x: 1000, y: floorY - 90, w: 90, h: 170, mat: 'metal' }),
+        makeObj({ name: '相框', shape: 'picture', x: 420, y: floorY - 250, w: 120, h: 100, mat: 'wood' }),
+      ];
+    }
+
     // 切换场景
     function setScene(name, fromUser) {
       state.scene = name;
-      state.objects = name === 'office' ? buildOffice() : buildRoom();
+      state.objects = name === 'office' ? buildOffice() : name === 'bedroom' ? buildBedroom() : buildRoom();
       state.particles = [];
       state.floaters = [];
       state.selectedId = null;
@@ -1111,6 +1127,62 @@
       },
     };
 
+    // 卧室新主题房专用图形（床/衣柜为固定件，闹钟/手机/毛绒熊/相框可砸）
+    Object.assign(SHAPES, {
+      bed(o) {
+        sctx.save(); sctx.translate(o.x, o.y);
+        sctx.fillStyle = '#6d5a9e'; sctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+        sctx.fillStyle = '#f8fafc'; sctx.fillRect(-o.w / 2 + 8, -o.h / 2 + 6, o.w - 16, o.h * 0.42);
+        sctx.fillStyle = '#ef8fb6'; sctx.fillRect(-o.w / 2 + 8, -o.h / 2 + 6 + o.h * 0.30, o.w - 16, o.h * 0.40);
+        sctx.fillStyle = '#fef3c7'; if (sctx.roundRect) { sctx.beginPath(); sctx.roundRect(-o.w / 2 + 20, -o.h / 2 + 10, 70, 34, 10); sctx.fill(); }
+        sctx.restore();
+      },
+      wardrobe(o) {
+        sctx.save(); sctx.translate(o.x, o.y);
+        sctx.fillStyle = '#8a5a2b'; sctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+        sctx.strokeStyle = '#5b3a1a'; sctx.lineWidth = 4; sctx.strokeRect(-o.w / 2, -o.h / 2, o.w, o.h);
+        sctx.beginPath(); sctx.moveTo(0, -o.h / 2); sctx.lineTo(0, o.h / 2); sctx.stroke();
+        sctx.fillStyle = '#e5c07b'; sctx.beginPath(); sctx.arc(-10, 0, 5, 0, 6.28); sctx.arc(10, 0, 5, 0, 6.28); sctx.fill();
+        sctx.restore();
+      },
+      alarm(o) {
+        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = '#ef4444';
+        sctx.beginPath(); sctx.arc(-o.w * 0.28, -o.h * 0.36, o.w * 0.14, 0, 6.28); sctx.arc(o.w * 0.28, -o.h * 0.36, o.w * 0.14, 0, 6.28); sctx.fill();
+        sctx.fillStyle = p.tint || '#f87171'; sctx.beginPath(); sctx.arc(0, 0, o.w * 0.42, 0, 6.28); sctx.fill();
+        sctx.fillStyle = '#fff'; sctx.beginPath(); sctx.arc(0, 0, o.w * 0.32, 0, 6.28); sctx.fill();
+        sctx.strokeStyle = '#222'; sctx.lineWidth = 3; sctx.beginPath(); sctx.moveTo(0, 0); sctx.lineTo(0, -o.h * 0.2); sctx.moveTo(0, 0); sctx.lineTo(o.w * 0.16, 0); sctx.stroke();
+        sctx.restore();
+      },
+      phone(o) {
+        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = p.tint || '#1f2937';
+        if (sctx.roundRect) { sctx.beginPath(); sctx.roundRect(-o.w / 2, -o.h / 2, o.w, o.h, 12); sctx.fill(); } else sctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+        sctx.fillStyle = 'rgba(125,211,252,0.92)';
+        if (sctx.roundRect) { sctx.beginPath(); sctx.roundRect(-o.w / 2 + 6, -o.h / 2 + 12, o.w - 12, o.h - 24, 8); sctx.fill(); } else sctx.fillRect(-o.w / 2 + 6, -o.h / 2 + 12, o.w - 12, o.h - 24);
+        sctx.fillStyle = '#0f172a'; sctx.fillRect(-9, -o.h / 2 + 5, 18, 4);
+        sctx.restore();
+      },
+      teddy(o) {
+        sctx.save(); sctx.translate(o.x, o.y);
+        sctx.fillStyle = '#c8894f';
+        sctx.beginPath(); sctx.arc(-o.w * 0.26, -o.h * 0.3, o.w * 0.14, 0, 6.28); sctx.arc(o.w * 0.26, -o.h * 0.3, o.w * 0.14, 0, 6.28); sctx.fill();
+        sctx.beginPath(); sctx.arc(0, -o.h * 0.12, o.w * 0.3, 0, 6.28); sctx.fill();
+        sctx.beginPath(); sctx.ellipse(0, o.h * 0.24, o.w * 0.3, o.h * 0.26, 0, 0, 6.28); sctx.fill();
+        sctx.fillStyle = '#222'; sctx.beginPath(); sctx.arc(-8, -o.h * 0.14, 3, 0, 6.28); sctx.arc(8, -o.h * 0.14, 3, 0, 6.28); sctx.fill();
+        sctx.fillStyle = '#7a4a1f'; sctx.beginPath(); sctx.arc(0, -o.h * 0.04, 5, 0, 6.28); sctx.fill();
+        sctx.restore();
+      },
+      picture(o) {
+        sctx.save(); sctx.translate(o.x, o.y);
+        sctx.fillStyle = '#a16207'; sctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+        sctx.fillStyle = '#e0f2fe'; sctx.fillRect(-o.w / 2 + 8, -o.h / 2 + 8, o.w - 16, o.h - 16);
+        sctx.fillStyle = '#22c55e'; sctx.beginPath(); sctx.moveTo(-o.w / 2 + 8, o.h / 2 - 8); sctx.lineTo(0, -2); sctx.lineTo(o.w / 2 - 8, o.h / 2 - 8); sctx.closePath(); sctx.fill();
+        sctx.fillStyle = '#fbbf24'; sctx.beginPath(); sctx.arc(o.w * 0.22, -o.h * 0.18, 8, 0, 6.28); sctx.fill();
+        sctx.restore();
+      },
+    });
+
     // 绘制单个对象（包含状态动画）
     function drawObject(o, time) {
       if (o.state === 'broken') return;
@@ -1216,20 +1288,20 @@
     // ============================================================
     // 场景主题皮肤：控制墙面/地板/环境粒子基调色（随主题联动）
     const THEMES = {
-      day:   { office: ['#dbeafe', '#bfdbfe'], room: ['#e5e7eb', '#cbd5e1'], floorO: '#94a3b8', floorR: '#9ca3af', ambient: '255,255,255' },
-      night: { office: ['#1e293b', '#0f172a'], room: ['#111827', '#0b1120'], floorO: '#334155', floorR: '#374151', ambient: '148,163,184' },
-      disco: { office: ['#312e81', '#1e1b4b'], room: ['#3b0764', '#1e1b4b'], floorO: '#4c1d95', floorR: '#4a044e', ambient: '255,255,255' },
+      day:   { office: ['#dbeafe', '#bfdbfe'], room: ['#e5e7eb', '#cbd5e1'], bedroom: ['#fce7f3', '#f5d0fe'], floorO: '#94a3b8', floorR: '#9ca3af', floorB: '#c9a27a', ambient: '255,255,255' },
+      night: { office: ['#1e293b', '#0f172a'], room: ['#111827', '#0b1120'], bedroom: ['#3b2f4a', '#1f1730'], floorO: '#334155', floorR: '#374151', floorB: '#4a3b52', ambient: '148,163,184' },
+      disco: { office: ['#312e81', '#1e1b4b'], room: ['#3b0764', '#1e1b4b'], bedroom: ['#6b21a8', '#3b0764'], floorO: '#4c1d95', floorR: '#4a044e', floorB: '#701a75', ambient: '255,255,255' },
     };
     function drawBackground() {
       const T = THEMES[state.theme] || THEMES.day;
-      const stops = state.scene === 'office' ? T.office : T.room;
+      const stops = state.scene === 'office' ? T.office : state.scene === 'bedroom' ? T.bedroom : T.room;
       // 墙面
       const wall = sctx.createLinearGradient(0, 0, 0, CANVAS_H);
       wall.addColorStop(0, stops[0]); wall.addColorStop(1, stops[1]);
       sctx.fillStyle = wall;
       sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       // 地板
-      sctx.fillStyle = state.scene === 'office' ? T.floorO : T.floorR;
+      sctx.fillStyle = state.scene === 'office' ? T.floorO : state.scene === 'bedroom' ? T.floorB : T.floorR;
       sctx.fillRect(0, 560, CANVAS_W, CANVAS_H - 560);
       sctx.fillStyle = 'rgba(0,0,0,.06)';
       for (let x = 0; x < CANVAS_W; x += 80) sctx.fillRect(x, 560, 2, CANVAS_H - 560);
@@ -1251,6 +1323,19 @@
         sctx.fillStyle = '#b45309'; sctx.font = 'bold 22px "Comic Sans MS"'; sctx.textAlign = 'center';
         sctx.fillText('加油!', 970, 145); sctx.font = '13px "Comic Sans MS"'; sctx.fillText('今天也要元气满满', 970, 175);
         sctx.textAlign = 'left';
+      } else if (state.scene === 'bedroom') {
+        // 窗户 + 月亮/窗帘
+        sctx.fillStyle = '#bae6fd'; sctx.fillRect(620, 90, 240, 160);
+        sctx.strokeStyle = '#7c5cbf'; sctx.lineWidth = 8; sctx.strokeRect(620, 90, 240, 160);
+        sctx.beginPath(); sctx.moveTo(740, 90); sctx.lineTo(740, 250); sctx.moveTo(620, 170); sctx.lineTo(860, 170); sctx.stroke();
+        sctx.fillStyle = '#fde68a'; sctx.beginPath(); sctx.arc(800, 130, 26, 0, 6.28); sctx.fill();
+        sctx.fillStyle = '#ef8fb6'; sctx.fillRect(612, 82, 34, 176); sctx.fillRect(834, 82, 34, 176); // 窗帘
+        // 地面圆地毯
+        sctx.fillStyle = 'rgba(239,143,182,.35)'; sctx.beginPath(); sctx.ellipse(680, 585, 260, 42, 0, 0, 6.28); sctx.fill();
+        sctx.strokeStyle = 'rgba(180,90,150,.4)'; sctx.lineWidth = 4; sctx.beginPath(); sctx.ellipse(680, 585, 200, 32, 0, 0, 6.28); sctx.stroke();
+        // 墙面字牌
+        sctx.fillStyle = 'rgba(124,92,191,.6)'; sctx.font = 'bold 30px "Comic Sans MS"'; sctx.textAlign = 'center';
+        sctx.fillText('🌙 晚安 · 把烦恼砸碎', CANVAS_W / 2, 60); sctx.textAlign = 'left';
       } else {
         sctx.fillStyle = 'rgba(239,68,68,.25)';
         sctx.font = 'bold 40px "Comic Sans MS"'; sctx.textAlign = 'center';
@@ -2464,7 +2549,7 @@
     window.addEventListener('keydown', (e) => {
       if (e.key === 'd' || e.key === 'D') { dbgVisible = !dbgVisible; const b = document.getElementById('dbgToggleBtn'); if (b) b.textContent = dbgVisible ? '🔧 调试面板：开 (D)' : '🔧 调试面板：关 (D)'; return; }
       // Q 快速切换场景
-      if (e.key === 'q' || e.key === 'Q') { const next = state.scene === 'office' ? 'room' : 'office'; setScene(next, true); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
+      if (e.key === 'q' || e.key === 'Q') { const order = ['office','room','bedroom']; const next = order[(order.indexOf(state.scene) + 1) % order.length]; setScene(next, true); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
       // 键盘 1-6 模拟手势
       const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
       if (simMap[e.key]) { simGesture(simMap[e.key]); }
