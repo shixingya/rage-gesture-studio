@@ -298,9 +298,10 @@
       </section>
 
       <div class="mt-auto flex flex-col gap-2 pt-3">
-        <div class="grid grid-cols-2 gap-2">
+        <div class="grid grid-cols-3 gap-2">
           <button id="snapshotBtn" class="bg-sky-700 hover:bg-sky-600 rounded-lg py-2 text-sm font-bold">📸 截图</button>
-          <button id="statsBtn" class="bg-violet-700 hover:bg-violet-600 rounded-lg py-2 text-sm font-bold">📊 生涯战绩</button>
+          <button id="statsBtn" class="bg-violet-700 hover:bg-violet-600 rounded-lg py-2 text-sm font-bold">📊 生涯</button>
+          <button id="randomMatBtn" class="bg-pink-700 hover:bg-pink-600 rounded-lg py-2 text-sm font-bold">🎲 大乱斗</button>
         </div>
         <button id="resetBtn" class="bg-rose-600 hover:bg-rose-500 rounded-lg py-2.5 font-bold">🔄 重置场景</button>
         <details class="text-xs text-white/50">
@@ -431,6 +432,7 @@
             <li><b class="text-amber-300">1</b> 出拳 · <b class="text-amber-300">2</b> 抛掷 · <b class="text-amber-300">3</b> 下拍</li>
             <li><b class="text-amber-300">4</b> 前推 · <b class="text-amber-300">5</b> 横扫 · <b class="text-amber-300">6</b> 吓唬</li>
             <li><b class="text-amber-300">Q</b> 循环切换场景（办公室/空发泄房/卧室） · <b class="text-amber-300">R</b> 收拾残局复活碎物</li>
+            <li><b class="text-amber-300">空格 / P</b> 暂停 · <b class="text-amber-300">M</b> 静音</li>
             <li><b class="text-amber-300">D</b> 开关调试面板</li>
             <li><b class="text-amber-300">? / H</b> 开关本说明</li>
             <li><b class="text-amber-300">Esc</b> 关闭弹窗</li>
@@ -501,6 +503,7 @@
       volume: 0.9,            // 主音量 0~1
       musicOn: false,         // 背景氛围乐开关
       ambience: 'off',        // 白噪音环境音：off/rain/wind
+      paused: false,          // 暂停：冻结物理与计时
       camOn: false,
       breakCount: 0,
       lastAction: 0,          // 防抖：上次触发动作的时间戳
@@ -2397,6 +2400,17 @@
         else if (curFPS > 45 && lowPerf) { lowPerf = false; initAmbient(); }
       }
     }
+    // 暂停遮罩：压暗 + 大字提示
+    function drawPauseOverlay() {
+      sctx.save();
+      sctx.fillStyle = 'rgba(0,0,0,.5)'; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+      sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
+      sctx.fillStyle = '#fbbf24'; sctx.font = '900 72px "Comic Sans MS", sans-serif';
+      sctx.fillText('⏸ 已暂停', CANVAS_W / 2, CANVAS_H / 2 - 20);
+      sctx.fillStyle = 'rgba(255,255,255,.8)'; sctx.font = 'bold 26px "Comic Sans MS", sans-serif';
+      sctx.fillText('按 空格 / P 继续发泄', CANVAS_W / 2, CANVAS_H / 2 + 44);
+      sctx.restore();
+    }
     function frame(t) {
       updateFPS(t);
       let dt = clamp((t - lastTime) / 1000, 0, 0.05); lastTime = t; // 下限保护：非单调时钟/后台标签不得产生负 dt
@@ -2404,6 +2418,7 @@
       timeScale += (1 - timeScale) * Math.min(1, dt * 3);
       dt *= timeScale;
 
+      if (!state.paused) {
       updateObjects(dt);
       // 连击超时自然重置（2.5s 无命中）
       if (state.combo > 0 && performance.now() - state.comboTime > 2500) { state.combo = 0; updateComboUI(); }
@@ -2419,7 +2434,7 @@
       updatePulses(dt);
       state.shake = Math.max(0, state.shake - dt * 60);
       state.transition = Math.max(0, state.transition - dt * 2.4); // 黑幕渐退
-
+      } // 暂停时冻结以上所有物理与计时更新
       // 绘制
       sctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
       sctx.save();
@@ -2447,6 +2462,7 @@
       if (state.transition > 0.01) { sctx.save(); sctx.fillStyle = `rgba(0,0,0,${state.transition})`; sctx.fillRect(0, 0, CANVAS_W, CANVAS_H); sctx.restore(); }
       if (state.bodyOnStage && state.camOn) drawPoseOnStage(); // 人体骨架叠加主场景
       drawDebug(); // 常驻调试面板
+      if (state.paused) drawPauseOverlay(); // 暂停遮罩
 
       requestAnimationFrame(frame);
     }
@@ -2681,6 +2697,19 @@
     }
     document.getElementById('statsBtn').addEventListener('click', () => { Sound.click(); openStats(); });
     document.getElementById('statsCloseBtn').addEventListener('click', () => { statsMask.classList.add('hidden'); statsMask.classList.remove('flex'); });
+    // 🎲 大乱斗：随机切换所有可碎物材质（体验不同手感）
+    document.getElementById('randomMatBtn').addEventListener('click', () => {
+      Sound.click();
+      const mats = ['plastic', 'glass', 'wood', 'metal'];
+      let n = 0;
+      for (const o of state.objects) {
+        if (o.base || o.kind === 'person' || o.state === 'broken') continue;
+        o.mat = mats[Math.floor(Math.random() * mats.length)]; o.hp = 100; n++;
+      }
+      refreshObjectSelect();
+      const o = selectedObj(); if (o && !o.base && o.kind !== 'person') highlightMat(o.mat);
+      spawnFloater(CANVAS_W / 2, 200, '🎲 已随机 ' + n + ' 个材质！', '#f9a8d4');
+    });
     // 首次全局点击解锁音频
     window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); if (state.musicOn && !Sound.isMusicPlaying()) Sound.startMusic(); if (state.ambience !== 'off' && !ambRestored) { ambRestored = true; Sound.startAmbience(state.ambience); } }, { once: false });
     let ambRestored = false; // 环境音仅首次手势自动恢复，避免每次点击重启
@@ -2694,6 +2723,10 @@
       if (e.key === 'q' || e.key === 'Q') { const order = ['office','room','bedroom']; const next = order[(order.indexOf(state.scene) + 1) % order.length]; setScene(next, true); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
       // R 收拾残局（复活碎物）
       if (e.key === 'r' || e.key === 'R') { reviveAllBroken(); return; }
+      // M 静音切换
+      if (e.key === 'm' || e.key === 'M') { const mb = document.getElementById('muteBtn'); state.muted = !state.muted; Sound.init(); Sound.setMuted(state.muted); Store.save({ muted: state.muted }); mb.textContent = state.muted ? '已静音' : '已开启'; mb.classList.toggle('active', !state.muted); return; }
+      // 空格 / P 暂停与继续
+      if (e.code === 'Space' || e.key === ' ' || e.key === 'p' || e.key === 'P') { e.preventDefault(); state.paused = !state.paused; if (!state.paused && state.musicOn && !Sound.isMusicPlaying()) { Sound.init(); Sound.resume(); Sound.startMusic(); } return; }
       // 键盘 1-6 模拟手势
       const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
       if (simMap[e.key]) { simGesture(simMap[e.key]); }
