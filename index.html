@@ -440,6 +440,7 @@
             <li><b class="text-amber-300">4</b> 前推 · <b class="text-amber-300">5</b> 横扫 · <b class="text-amber-300">6</b> 吓唬</li>
             <li><b class="text-amber-300">Q</b> 循环切换场景（办公室/空发泄房/卧室） · <b class="text-amber-300">R</b> 收拾残局复活碎物</li>
             <li><b class="text-amber-300">空格 / P</b> 暂停 · <b class="text-amber-300">M</b> 静音</li>
+            <li><b class="text-amber-300">← / →</b> 循环切换选中对象</li>
             <li><b class="text-amber-300">D</b> 开关调试面板</li>
             <li><b class="text-amber-300">? / H</b> 开关本说明</li>
             <li><b class="text-amber-300">Esc</b> 关闭弹窗</li>
@@ -2564,6 +2565,16 @@
       const o = selectedObj();
       if (o) highlightMat(o.mat);
     }
+    // 方向键循环选择可砸对象（跳过固定件/已碎）
+    function cycleSelect(dir) {
+      const list = state.objects.filter(o => !o.base && o.state !== 'broken');
+      if (!list.length) return;
+      let idx = list.findIndex(o => o.id === state.selectedId);
+      idx = idx < 0 ? (dir > 0 ? 0 : list.length - 1) : (idx + dir + list.length) % list.length;
+      const o = list[idx];
+      selectObject(o.id); if (objSelect) objSelect.value = o.id;
+      spawnFloater(o.x, o.y - o.h / 2 - 40, '🎯 ' + o.name, '#fbbf24');
+    }
 
     // 画布指针交互（鼠标 + 触屏统一：选择 + 拖拽甩出 + 双击/双 tap 击打）
     function canvasPos(e) {
@@ -2742,6 +2753,9 @@
       if (e.key === 'm' || e.key === 'M') { const mb = document.getElementById('muteBtn'); state.muted = !state.muted; Sound.init(); Sound.setMuted(state.muted); Store.save({ muted: state.muted }); mb.textContent = state.muted ? '已静音' : '已开启'; mb.classList.toggle('active', !state.muted); return; }
       // 空格 / P 暂停与继续
       if (e.code === 'Space' || e.key === ' ' || e.key === 'p' || e.key === 'P') { e.preventDefault(); state.paused = !state.paused; if (!state.paused && state.musicOn && !Sound.isMusicPlaying()) { Sound.init(); Sound.resume(); Sound.startMusic(); } return; }
+      // ← / → 循环切换选中对象
+      if (e.key === 'ArrowRight') { e.preventDefault(); cycleSelect(1); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); cycleSelect(-1); return; }
       // 键盘 1-6 模拟手势
       const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
       if (simMap[e.key]) { simGesture(simMap[e.key]); }
