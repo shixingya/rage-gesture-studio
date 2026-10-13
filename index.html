@@ -290,6 +290,10 @@
       </section>
 
       <div class="mt-auto flex flex-col gap-2 pt-3">
+        <div class="grid grid-cols-2 gap-2">
+          <button id="snapshotBtn" class="bg-sky-700 hover:bg-sky-600 rounded-lg py-2 text-sm font-bold">📸 截图</button>
+          <button id="statsBtn" class="bg-violet-700 hover:bg-violet-600 rounded-lg py-2 text-sm font-bold">📊 生涯战绩</button>
+        </div>
         <button id="resetBtn" class="bg-rose-600 hover:bg-rose-500 rounded-lg py-2.5 font-bold">🔄 重置场景</button>
         <details class="text-xs text-white/50">
           <summary class="cursor-pointer">手势说明</summary>
@@ -395,6 +399,16 @@
     </div>
   </div>
 
+  <!-- ================= 生涯战绩统计弹窗 ================= -->
+  <div id="statsMask" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="max-w-md w-full bg-[#1b2130] rounded-2xl border border-white/10 p-7 shadow-2xl">
+      <div class="text-center mb-4"><div class="text-4xl">📊</div><h3 class="text-xl font-black text-violet-300 mt-1">生涯战绩</h3><p class="text-xs text-white/50">全部数据只存在你本地浏览器</p></div>
+      <div id="statsGrid" class="grid grid-cols-2 gap-3 mb-4"></div>
+      <div id="statsAch" class="text-xs text-white/55 mb-5 leading-relaxed"></div>
+      <button id="statsCloseBtn" class="w-full bg-orange-500 hover:bg-orange-400 rounded-xl py-2.5 font-bold">关闭</button>
+    </div>
+  </div>
+
   <!-- ================= 帮助浮层 ================= -->
   <div id="helpMask" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4">
     <div class="max-w-2xl w-full bg-[#1b2130] rounded-2xl border border-white/10 p-7 shadow-2xl max-h-[85vh] overflow-y-auto">
@@ -441,6 +455,7 @@
     // ============================================================
     const CANVAS_W = 1280;
     const CANVAS_H = 720;
+    const SESSION_START = Date.now(); // 本次会话起始时间（生涯战绩统计游玩时长）
 
     const stage = document.getElementById('stage');
     const sctx = stage.getContext('2d');
@@ -1654,19 +1669,36 @@
       sctx.restore();
     }
 
+    // 连击称号等级（阈值递增，颜色/称号升级）
+    const COMBO_TIERS = [
+      { min: 30, name: '🌪️ 天下无双', fill: '#f0abfc', stroke: 'rgba(192,38,211,.9)' },
+      { min: 20, name: '💀 残暴无情', fill: '#c084fc', stroke: 'rgba(109,40,217,.9)' },
+      { min: 12, name: '🔥 火爆连击', fill: '#fb923c', stroke: 'rgba(220,38,38,.9)' },
+      { min: 6,  name: '👍 手感不错', fill: '#facc15', stroke: 'rgba(202,138,4,.85)' },
+    ];
+    function comboTierInfo(c) { for (const t of COMBO_TIERS) if (c >= t.min) return t; return null; }
+
     // 连击大字幕（屏幕中部半透明）
     function drawComboOverlay(time) {
       if (state.combo < 3) return;
       const a = clamp((state.comboTime + 2500 - performance.now()) / 2500, 0, 1);
+      const tier = comboTierInfo(state.combo);
       sctx.save();
       sctx.globalAlpha = 0.5 * a;
       sctx.font = '900 ' + (70 + state.combo * 1.5) + 'px "Comic Sans MS", sans-serif';
       sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
-      sctx.lineWidth = 8; sctx.strokeStyle = 'rgba(220,38,38,.85)';
-      sctx.fillStyle = 'rgba(251,146,60,.95)';
+      sctx.lineWidth = 8; sctx.strokeStyle = tier ? tier.stroke : 'rgba(220,38,38,.85)';
+      sctx.fillStyle = tier ? tier.fill : 'rgba(251,146,60,.95)';
       const txt = 'x' + state.combo;
       const wob = state.reducedMotion ? 0 : Math.sin(time * 8) * 4;
       sctx.strokeText(txt, CANVAS_W / 2, 300 + wob); sctx.fillText(txt, CANVAS_W / 2, 300 + wob);
+      if (tier) {
+        sctx.globalAlpha = 0.72 * a;
+        sctx.font = '900 34px "Comic Sans MS", sans-serif';
+        sctx.lineWidth = 6; sctx.strokeStyle = 'rgba(0,0,0,.55)';
+        sctx.strokeText(tier.name, CANVAS_W / 2, 300 + wob + 62);
+        sctx.fillStyle = tier.fill; sctx.fillText(tier.name, CANVAS_W / 2, 300 + wob + 62);
+      }
       sctx.restore();
     }
 
@@ -2543,6 +2575,39 @@
     });
     document.getElementById('resetCancelBtn').addEventListener('click', () => { resetMask.classList.add('hidden'); resetMask.classList.remove('flex'); });
     document.getElementById('resetOkBtn').addEventListener('click', () => { doReset(); resetMask.classList.add('hidden'); resetMask.classList.remove('flex'); });
+    // 📸 画面截图：将主场景画布导出为 PNG 下载
+    document.getElementById('snapshotBtn').addEventListener('click', () => {
+      Sound.click();
+      try {
+        const url = document.getElementById('stage').toDataURL('image/png');
+        const a = document.createElement('a');
+        const ts = new Date(); const p = n => String(n).padStart(2, '0');
+        a.download = 'rage-' + ts.getFullYear() + p(ts.getMonth() + 1) + p(ts.getDate()) + '-' + p(ts.getHours()) + p(ts.getMinutes()) + p(ts.getSeconds()) + '.png';
+        a.href = url; document.body.appendChild(a); a.click(); a.remove();
+        spawnFloater(CANVAS_W / 2, 200, '📸 已保存截图', '#7dd3fc');
+      } catch (e) { spawnFloater(CANVAS_W / 2, 200, '截图失败', '#fca5a5'); }
+    });
+    // 📊 生涯战绩：聚合本地持久化数据
+    const statsMask = document.getElementById('statsMask');
+    function openStats() {
+      const cell = (icon, label, val, color) => '<div class="bg-white/5 rounded-lg p-3 text-center"><div class="text-2xl mb-1">' + icon + '</div><div class="text-xl font-black ' + (color || 'text-white') + '">' + val + '</div><div class="text-[11px] text-white/50 mt-0.5">' + label + '</div></div>';
+      const mins = Math.max(1, Math.round((Date.now() - SESSION_START) / 60000));
+      document.getElementById('statsGrid').innerHTML = [
+        cell('💥', '累计摧毁', state.totalBreak, 'text-rose-400'),
+        cell('🔥', '最高连击', state.bestCombo, 'text-orange-400'),
+        cell('🏆', '本局得分', state.score, 'text-emerald-400'),
+        cell('⏱️', '挑战最佳', state.challenge.best, 'text-sky-400'),
+        cell('🎯', '成就解锁', state.unlockedAch.length + '/' + ACHIEVEMENTS.length, 'text-amber-400'),
+        cell('🎮', '本次游玩', mins + ' 分钟', 'text-violet-300'),
+      ].join('');
+      const got = ACHIEVEMENTS.filter(a => state.unlockedAch.includes(a.id));
+      document.getElementById('statsAch').innerHTML = got.length
+        ? '已解锁：' + got.map(a => a.icon + a.name).join(' · ')
+        : '还没解锁任何成就，再多砸几下吧 💪';
+      statsMask.classList.remove('hidden'); statsMask.classList.add('flex');
+    }
+    document.getElementById('statsBtn').addEventListener('click', () => { Sound.click(); openStats(); });
+    document.getElementById('statsCloseBtn').addEventListener('click', () => { statsMask.classList.add('hidden'); statsMask.classList.remove('flex'); });
     // 首次全局点击解锁音频
     window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); if (state.musicOn && !Sound.isMusicPlaying()) Sound.startMusic(); }, { once: false });
     // 按 D 键切换调试面板
@@ -2642,7 +2707,7 @@
       helpMask.classList.toggle('hidden', !open); helpMask.classList.toggle('flex', open);
     }
     function closeAllMasks() {
-      [helpMask, lbMask, resetMask, document.getElementById('resultMask'), document.getElementById('shareCardMask')].forEach(m => { if (m) { m.classList.add('hidden'); m.classList.remove('flex'); } });
+      [helpMask, lbMask, resetMask, document.getElementById('resultMask'), document.getElementById('shareCardMask'), statsMask].forEach(m => { if (m) { m.classList.add('hidden'); m.classList.remove('flex'); } });
     }
     document.getElementById('helpBtn').addEventListener('click', toggleHelp);
     document.getElementById('helpCloseBtn').addEventListener('click', toggleHelp);
