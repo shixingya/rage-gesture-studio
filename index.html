@@ -56,6 +56,13 @@
       position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%);
       z-index: 25; pointer-events: none; white-space: nowrap;
     }
+
+    /* 窄屏（手机/竖屏）：主舞台在上、控制面板在下可滚动，避免右侧栏挤出 */
+    @media (max-width: 768px) {
+      .app-shell { flex-direction: column; }
+      .stage-wrap { flex: 0 0 auto; height: 56vh; }
+      .panel { width: 100% !important; height: 44vh; flex: 0 0 auto; border-left: none !important; border-top: 1px solid rgba(255,255,255,.1); }
+    }
   </style>
 </head>
 
@@ -64,7 +71,7 @@
   <div id="smallScreenHint" class="md:hidden fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-black text-center text-xs py-1.5 px-2">
     📱 本应用为电脑大屏优化；建议横屏或使用电脑。触屏可直接拖拽/双击物体发泄。
   </div>
-  <div class="flex h-screen w-screen">
+  <div class="app-shell flex h-screen w-screen">
 
     <!-- ================= 主舞台区域 ================= -->
     <div class="stage-wrap flex-1 relative bg-[#2b3242]">
@@ -563,7 +570,9 @@
       { id: 'break_20',    name: '拆家新手', desc: '累计摧毁 20 个', icon: '🔨', cond: () => state.totalBreak >= 20 },
       { id: 'break_100',   name: '破坏之王', desc: '累计摧毁 100 个', icon: '👑', cond: () => state.totalBreak >= 100 },
       { id: 'combo_10',    name: '连击达人', desc: '达成 10 连击', icon: '🔥', cond: () => state.bestCombo >= 10 },
+      { id: 'combo_20',    name: '连击高手', desc: '达成 20 连击', icon: '💥', cond: () => state.bestCombo >= 20 },
       { id: 'combo_30',    name: '无敌连招', desc: '达成 30 连击', icon: '⚡', cond: () => state.bestCombo >= 30 },
+      { id: 'break_500',   name: '片瓦不留', desc: '累计摧毁 500 个', icon: '🌋', cond: () => state.totalBreak >= 500 },
       { id: 'score_1000',  name: '小有所成', desc: '本局得分达 1000', icon: '🎯', cond: () => state.score >= 1000 },
       { id: 'score_5000',  name: '宣泄大师', desc: '本局得分达 5000', icon: '🏆', cond: () => state.score >= 5000 },
       { id: 'berserk_1',   name: '理性崩塌', desc: '首次进入狂暴模式', icon: '😡', cond: () => state._berserkSeen },
@@ -1613,6 +1622,7 @@
 
     // 握拳挥拳：击打
     function actHit(o, force) {
+      if (state.paused) return;
       if (!o || o.state === 'broken') return;
       state.shake = Math.max(state.shake, 6 + force * 14);
       addPulse(o.x, o.y, '#f97316');
@@ -1629,6 +1639,7 @@
 
     // 抓起（开始拖动）
     function actGrab(o) {
+      if (state.paused) return;
       if (!o || o.state === 'broken') return;
       Sound.grab();
       if (o.kind !== 'person') { setAnim(o, 'shake'); }
@@ -1636,13 +1647,14 @@
 
     // 甩出：根据速度飞物体
     function actThrow(o, vx, vy) {
-      if (!o) return;
+      if (!o || state.paused) return;
       o.state = 'fly'; o.vx = vx; o.vy = vy; o.vr = clamp(vx / 400, -0.25, 0.25);
       Sound.whoosh();
     }
 
     // 手掌向下猛拍：砸目标
     function actSlap(o) {
+      if (state.paused) return;
       if (!o || o.state === 'broken') return;
       o.flash = 1; o.punch = 1;
       state.shake = Math.max(state.shake, 18);
@@ -1656,6 +1668,7 @@
 
     // 手掌向前推：推飞目标
     function actPush(o) {
+      if (state.paused) return;
       if (!o || o.state === 'broken') return;
       o.flash = 1; o.punch = 1;
       addPulse(o.x, o.y, '#38bdf8');
@@ -1666,6 +1679,7 @@
 
     // 双手横扫：扫落选中及周围物体
     function actSweep(handY) {
+      if (state.paused) return;
       state.shake = Math.max(state.shake, 16);
       Sound.impact(1);
       const band = state.objects.filter(o => o.state !== 'broken' && !o.base && Math.abs(o.y - handY) < 160);
@@ -1679,6 +1693,7 @@
 
     // 张开手掌靠近：吓一吓目标
     function actScare(o) {
+      if (state.paused) return;
       if (!o || o.state === 'broken') return;
       o.face = 'fear'; setAnim(o, 'fear');
       if (o.kind === 'person') spawnFloater(o.x, o.y - o.h / 2, '😱!', '#fecaca');
