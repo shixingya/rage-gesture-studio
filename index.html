@@ -257,6 +257,14 @@
           <span class="text-xs text-white/60">手势灵敏度：<span id="sensVal">1.0</span></span>
           <input id="sensSlider" type="range" min="5" max="30" value="10" />
         </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-white/60">重力：<span id="gravVal">1.0x</span></span>
+          <input id="gravSlider" type="range" min="10" max="200" value="100" />
+        </label>
+        <label class="flex flex-col gap-1">
+          <span class="text-xs text-white/60">弹力：<span id="bounceVal">0.4</span></span>
+          <input id="bounceSlider" type="range" min="0" max="90" value="40" />
+        </label>
         <label class="flex items-center justify-between">
           <span class="text-xs text-white/60">物体自动重生</span>
           <input id="respawnToggle" type="checkbox" checked class="w-5 h-5 accent-orange-500" />
@@ -541,6 +549,8 @@
       berserkUntil: 0,        // 狂暴结束时间
       respawn: true,          // 物体破碎后自动重生
       sensitivity: 1,         // 手势灵敏度系数（越大越易触发）
+      gravityScale: 1,        // 重力倍率（0.1~2.0，月低重力/超重力玩具）
+      bounceScale: 0.4,       // 落地反弹系数（0~0.9）
       bodyOnStage: false,     // 是否将人体骨架叠加到主场景
       reducedMotion: false,   // 无障碍：减少动态效果（关震动/慢动作/粒子）
       highContrast: false,    // 无障碍：高对比模式（关压暗与暗角）
@@ -863,7 +873,7 @@
     // 每帧更新粒子物理
     function updateParticles(dt) {
       for (const p of state.particles) {
-        p.vy += GRAVITY * dt;
+        p.vy += GRAVITY * state.gravityScale * dt;
         p.x += p.vx * dt;
         p.y += p.vy * dt;
         p.rot += p.vr * dt;
@@ -1890,7 +1900,7 @@
         }
         // 飞体物理
         if (o.state === 'fly') {
-          o.vy += GRAVITY * dt;
+          o.vy += GRAVITY * state.gravityScale * dt;
           o.x += o.vx * dt;
           o.y += o.vy * dt;
           o.rot += o.vr * dt;
@@ -1900,7 +1910,7 @@
           if (o.y > floorY - o.h / 2) {
             o.y = floorY - o.h / 2;
             if (Math.abs(o.vy) > 250 && MATERIALS[o.mat].breakable) { destroyObject(o); }
-            else { o.vy *= -0.4; o.vx *= 0.7; if (Math.abs(o.vy) < 60) { o.state = 'idle'; o.rot = 0; o.trail = null; } }
+            else { o.vy *= -state.bounceScale; o.vx *= 0.7; if (Math.abs(o.vy) < 60) { o.state = 'idle'; o.rot = 0; o.trail = null; } }
           }
           if (o.x < -80 || o.x > CANVAS_W + 80) destroyObject(o);
         }
@@ -2944,6 +2954,11 @@
     const sensSlider = document.getElementById('sensSlider');
     const sensVal = document.getElementById('sensVal');
     sensSlider.addEventListener('input', () => { state.sensitivity = sensSlider.value / 10; sensVal.textContent = state.sensitivity.toFixed(1); Store.save({ sensitivity: state.sensitivity }); });
+    // 重力/弹力滑块
+    const gravSlider = document.getElementById('gravSlider'), gravVal = document.getElementById('gravVal');
+    gravSlider.addEventListener('input', () => { state.gravityScale = gravSlider.value / 100; gravVal.textContent = state.gravityScale.toFixed(1) + 'x'; Store.save({ gravityScale: state.gravityScale }); });
+    const bounceSlider = document.getElementById('bounceSlider'), bounceVal = document.getElementById('bounceVal');
+    bounceSlider.addEventListener('input', () => { state.bounceScale = bounceSlider.value / 100; bounceVal.textContent = state.bounceScale.toFixed(2); Store.save({ bounceScale: state.bounceScale }); });
     // 重生开关
     document.getElementById('respawnToggle').addEventListener('change', (e) => { state.respawn = e.target.checked; Store.save({ respawn: state.respawn }); });
     // 骨架叠加主场景
@@ -3032,6 +3047,8 @@
       if (typeof s.volume === 'number') { state.volume = s.volume; Sound.setVolume(s.volume); document.getElementById('volSlider').value = Math.round(s.volume*100); document.getElementById('volVal').textContent = document.getElementById('volSlider').value; }
       if (typeof s.muted === 'boolean') { state.muted = s.muted; const mb = document.getElementById('muteBtn'); mb.textContent = s.muted ? '已静音' : '已开启'; mb.classList.toggle('active', !s.muted); }
       if (typeof s.sensitivity === 'number') { state.sensitivity = s.sensitivity; document.getElementById('sensSlider').value = Math.round(s.sensitivity*10); document.getElementById('sensVal').textContent = s.sensitivity.toFixed(1); }
+      if (typeof s.gravityScale === 'number') { state.gravityScale = s.gravityScale; document.getElementById('gravSlider').value = Math.round(s.gravityScale*100); document.getElementById('gravVal').textContent = s.gravityScale.toFixed(1) + 'x'; }
+      if (typeof s.bounceScale === 'number') { state.bounceScale = s.bounceScale; document.getElementById('bounceSlider').value = Math.round(s.bounceScale*100); document.getElementById('bounceVal').textContent = s.bounceScale.toFixed(2); }
       if (typeof s.respawn === 'boolean') { state.respawn = s.respawn; document.getElementById('respawnToggle').checked = s.respawn; }
       if (typeof s.bodyOnStage === 'boolean') { state.bodyOnStage = s.bodyOnStage; document.getElementById('bodyStageToggle').checked = s.bodyOnStage; }
       if (typeof s.reducedMotion === 'boolean') { state.reducedMotion = s.reducedMotion; document.getElementById('reduceMotionToggle').checked = s.reducedMotion; }
