@@ -281,6 +281,11 @@
           <span class="text-xs text-white/60">弹力：<span id="bounceVal">0.4</span></span>
           <input id="bounceSlider" type="range" min="0" max="90" value="40" />
         </label>
+        <div class="flex gap-1.5">
+          <button class="grav-preset badge bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1 text-xs" data-grav="16">🌙 月球</button>
+          <button class="grav-preset badge bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1 text-xs" data-grav="100">🌍 地球</button>
+          <button class="grav-preset badge bg-white/10 hover:bg-white/20 rounded-lg px-2.5 py-1 text-xs" data-grav="200">🪐 木星</button>
+        </div>
         <label class="flex items-center justify-between">
           <span class="text-xs text-white/60">物体自动重生</span>
           <input id="respawnToggle" type="checkbox" checked class="w-5 h-5 accent-orange-500" />
@@ -2993,6 +2998,12 @@
     gravSlider.addEventListener('input', () => { state.gravityScale = gravSlider.value / 100; gravVal.textContent = state.gravityScale.toFixed(1) + 'x'; Store.save({ gravityScale: state.gravityScale }); });
     const bounceSlider = document.getElementById('bounceSlider'), bounceVal = document.getElementById('bounceVal');
     bounceSlider.addEventListener('input', () => { state.bounceScale = bounceSlider.value / 100; bounceVal.textContent = state.bounceScale.toFixed(2); Store.save({ bounceScale: state.bounceScale }); });
+    // 重力预设（月球/地球/木星）
+    const GRAV_PRESET_LABEL = { 16: '🌙 低重力～', 100: '🌍 正常重力', 200: '🪐 超重力！' };
+    document.querySelectorAll('.grav-preset').forEach(b => b.addEventListener('click', () => {
+      const v = +b.dataset.grav; gravSlider.value = v; gravSlider.dispatchEvent(new Event('input'));
+      Sound.click(); spawnFloater(CANVAS_W / 2, 210, GRAV_PRESET_LABEL[v] || ('重力 ' + (v / 100) + 'x'), '#a5f3fc');
+    }));
     // 重生开关
     document.getElementById('respawnToggle').addEventListener('change', (e) => { state.respawn = e.target.checked; Store.save({ respawn: state.respawn }); });
     // 骨架叠加主场景
