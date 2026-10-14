@@ -589,6 +589,7 @@
 
     // 交互用：当前被"抓住"拖动的对象（鼠标或手势共用）
     let grabbed = null;       // { obj, offX, offY, lastX, lastY, vx, vy }
+    let hoverId = null;       // 鼠标悬停高亮的对象 id
 
     // 工具函数：限定数值范围
     function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -1441,6 +1442,15 @@
         sctx.stroke(); sctx.restore();
       }
       sctx.restore();
+      // 鼠标悬停高亮：可碎物外框呼吸虚线（屏幕空间）
+      if (o.id === hoverId && o.state !== 'broken' && !o.base && !lowPerf) {
+        sctx.save(); sctx.globalAlpha = 0.55 + Math.sin(performance.now() / 200) * 0.2;
+        sctx.strokeStyle = '#fde68a'; sctx.lineWidth = 3; sctx.setLineDash([7, 6]);
+        sctx.beginPath();
+        if (sctx.roundRect) sctx.roundRect(o.x - o.w / 2 - 6, o.y - o.h / 2 - 6, o.w + 12, o.h + 12, 10);
+        else sctx.rect(o.x - o.w / 2 - 6, o.y - o.h / 2 - 6, o.w + 12, o.h + 12);
+        sctx.stroke(); sctx.restore();
+      }
       // 出气标签：贴在对象头顶（屏幕空间，不随旋转）
       if (o.label && o.state !== 'broken') {
         const ty = o.y - o.h / 2 - 12 + oy;
@@ -2786,6 +2796,15 @@
       grabbed.lastX = p.x; grabbed.lastY = p.y;
       grabbed.obj.x = p.x + grabbed.offX; grabbed.obj.y = p.y + grabbed.offY;
     });
+    // 鼠标悬停：高亮可碎物 + 光标反馈（触屏不参）
+    stage.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch' || grabbed || handCursor.active) return;
+      const p = canvasPos(e); const o = pickObject(p.x, p.y);
+      const can = o && !o.base && o.state !== 'broken';
+      hoverId = can ? o.id : null;
+      stage.style.cursor = can ? 'grab' : (o ? 'default' : 'default');
+    });
+    stage.addEventListener('pointerleave', () => { if (!grabbed) hoverId = null; });
     window.addEventListener('pointerup', () => {
       if (grabbed && !handCursor.active) {
         const g = grabbed; grabbed = null;
