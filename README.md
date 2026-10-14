@@ -5,6 +5,9 @@
 > 🎮 **在线体验（点开即玩，无需下载）**：<https://shixingya.github.io/rage-gesture-studio/>（也可记更短的入口 <https://shixingya.github.io/> ，会自动跳转）
 > 通过 https 安全上下文访问，摄像头手势识别可直接启用（比本地 `file://` 双击更完整）。
 
+> 🧊 **全 3D 写实版（Beta）**：<https://shixingya.github.io/rage-gesture-studio/index3d.html>
+> 基于 **Three.js + cannon-es** 的实时三维宣泄场景：PBR 物理材质（玻璃透射/金属反射/陶瓷清漆）、RoomEnvironment 环境光照（IBL）、ACES 色调映射与软阴影、泛光后期（UnrealBloomPass + OutputPass）、刚体物理与撞击碎裂成块、昼夜光照切换；同样支持 MediaPipe 手势（握拳连打 / 双手横扫 / 捏合甩物 / 张掌下拍）。需要 WebGL2 与联网加载引擎。
+
 一个**单 HTML 文件、纯前端**的虚拟情绪发泄小游戏。调用电脑摄像头，用**手势**砸办公室物品、揍卡通老板，或切到空发泄房甩玻璃瓶、拍盘子——卡通画风、无血腥写实，只为了让你笑着把压力发泄出去。
 
 > ⚠️ 本程序仅为虚拟趣味情绪释放工具，请勿模仿现实破坏与暴力行为。
