@@ -2133,6 +2133,7 @@
       { id: 'score2000', name: '累计 2000 分', icon: '🎯', key: 'score',   target: 2000 },
       { id: 'scene3',    name: '切换 3 次场景', icon: '🔀', key: 'scene',   target: 3 },
       { id: 'berserk1',  name: '进入狂暴 1 次', icon: '😡', key: 'berserk', target: 1 },
+      { id: 'color3',    name: '上色 3 个物体', icon: '🎨', key: 'color',   target: 3 },
     ];
     function todayKey() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
     function initQuests() {
@@ -2140,7 +2141,7 @@
       if (s.quests && s.quests.date === todayKey() && s.quests.c) {
         state.quests = s.quests;
       } else {
-        state.quests = { date: todayKey(), c: { break: 0, combo: 0, score: 0, scene: 0, berserk: 0 }, done: [] };
+        state.quests = { date: todayKey(), c: { break: 0, combo: 0, score: 0, scene: 0, berserk: 0, color: 0 }, done: [] };
         Store.save({ quests: state.quests });
       }
     }
@@ -2711,7 +2712,7 @@
       if (!o) { spawnFloater(CANVAS_W / 2, 200, '请先选中一个物体', '#fdba74'); return; }
       if (o.base) { spawnFloater(o.x, o.y - o.h / 2 - 30, '固定件不能上色', '#fca5a5'); return; }
       o.color = color;
-      if (color) { state._colored = true; checkAchievements(); }
+      if (color) { state._colored = true; questAdd('color', 1); checkAchievements(); }
       spawnFloater(o.x, o.y - o.h / 2 - 30, color ? '🎨 已上色' : '🎨 已还原', color || '#cbd5e1');
       Sound.click();
     }
