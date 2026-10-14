@@ -580,6 +580,7 @@
       highContrast: false,    // 无障碍：高对比模式（关压暗与暗角）
       // —— 成就 & 挑战 ——
       unlockedAch: [],        // 已解锁成就 id
+      visitedScenes: [],      // 本账号体验过的场景名（成就用，持久）
       _colored: false,        // 本会话是否用过自定义上色（成就用）
       _lowGrav: false,        // 本会话是否体验过低重力（成就用）
       celebrated: [],         // 本局已庆祝的分数里程碑
@@ -640,6 +641,7 @@
       { id: 'berserk_1',   name: '理性崩塌', desc: '首次进入狂暴模式', icon: '😡', cond: () => state._berserkSeen },
       { id: 'colorist',    name: '色彩玩家', desc: '首次给物体上色', icon: '🎨', cond: () => state._colored },
       { id: 'moon_walk',   name: '月球漫步', desc: '首次体验低重力（≤0.3x）', icon: '🌙', cond: () => state._lowGrav },
+      { id: 'scene_all',   name: '环球旅行家', desc: '体验全部 4 个场景', icon: '🧭', cond: () => state.visitedScenes.length >= 4 },
     ];
     const achToastBox = document.getElementById('achToastBox');
     function checkAchievements() {
@@ -1063,6 +1065,7 @@
     // 切换场景
     function setScene(name, fromUser) {
       state.scene = name;
+      if (!state.visitedScenes.includes(name)) { state.visitedScenes.push(name); Store.save({ visitedScenes: state.visitedScenes }); checkAchievements(); }
       state.objects = name === 'office' ? buildOffice() : name === 'bedroom' ? buildBedroom() : name === 'kitchen' ? buildKitchen() : buildRoom();
       state.particles = [];
       state.floaters = [];
@@ -3165,6 +3168,7 @@
       if (s.ambience === 'rain' || s.ambience === 'wind') { state.ambience = s.ambience; highlightAmb(s.ambience); /* 环境音同样需手势启动，此处仅高亮，pointerdown 时恢复 */ }
       if (CHALLENGE_DIFFICULTY[s.challengeDiff]) { state.challenge.diff = s.challengeDiff; highlightDiff(s.challengeDiff); updateChallengeBtnLabel(); }
       if (Array.isArray(s.unlockedAch)) state.unlockedAch = s.unlockedAch.slice();
+      if (Array.isArray(s.visitedScenes)) state.visitedScenes = s.visitedScenes.slice();
       if (typeof s.challengeBest === 'number') state.challenge.best = s.challengeBest;
       if (Array.isArray(s.challengeScores)) state.challenge.scores = s.challengeScores.slice();
       if (s.light) {
