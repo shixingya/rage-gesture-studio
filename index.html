@@ -348,9 +348,10 @@
           <button id="statsBtn" class="bg-violet-700 hover:bg-violet-600 rounded-lg py-2 text-sm font-bold">📊 生涯</button>
           <button id="randomMatBtn" class="bg-pink-700 hover:bg-pink-600 rounded-lg py-2 text-sm font-bold">🎲 大乱斗</button>
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <button id="exportSaveBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">📥 导出存档</button>
-          <button id="importSaveBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">📤 导入存档</button>
+        <div class="grid grid-cols-3 gap-2">
+          <button id="exportSaveBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">📥 导出</button>
+          <button id="importSaveBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">📤 导入</button>
+          <button id="rainbowBtn" class="bg-gradient-to-r from-fuchsia-600 to-amber-500 hover:brightness-110 rounded-lg py-1.5 text-xs font-bold">🌈 彩虹</button>
           <input id="importSaveInput" type="file" accept="application/json,.json" class="hidden" />
         </div>
         <button id="shatterBtn" class="bg-red-600 hover:bg-red-500 rounded-lg py-2.5 font-bold">💥 一键清屏（砸碎全部）</button>
@@ -2720,6 +2721,17 @@
     document.querySelectorAll('.color-sw-btn').forEach(b => b.addEventListener('click', () => setObjectColor(b.dataset.color)));
     document.getElementById('colorPick').addEventListener('input', (e) => setObjectColor(e.target.value));
     document.getElementById('colorResetBtn').addEventListener('click', () => setObjectColor(null));
+    // 🌈 彩虹派对：给全场非固定物体随机上色
+    const RAINBOW = ['#ef4444', '#f97316', '#facc15', '#22c55e', '#38bdf8', '#a855f7', '#ec4899'];
+    document.getElementById('rainbowBtn').addEventListener('click', () => {
+      if (state.paused) return;
+      Sound.init(); Sound.resume(); Sound.click();
+      const list = state.objects.filter(o => !o.base && o.kind !== 'person' && o.state !== 'broken');
+      if (!list.length) { spawnFloater(CANVAS_W / 2, 200, '没有可上色的物体', '#cbd5e1'); return; }
+      list.forEach(o => { o.color = RAINBOW[Math.floor(Math.random() * RAINBOW.length)]; });
+      state._colored = true; questAdd('color', Math.min(list.length, 3)); checkAchievements();
+      spawnFloater(CANVAS_W / 2, 190, '🌈 彩虹派对！已上色 ' + list.length + ' 个', '#f0abfc');
+    });
     // 刷新对象下拉列表
     function refreshObjectSelect() {
       objSelect.innerHTML = '<option value="">-- 选择目标 --</option>' +
