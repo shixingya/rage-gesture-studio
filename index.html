@@ -353,6 +353,7 @@
           <button id="importSaveBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">📤 导入存档</button>
           <input id="importSaveInput" type="file" accept="application/json,.json" class="hidden" />
         </div>
+        <button id="shatterBtn" class="bg-red-600 hover:bg-red-500 rounded-lg py-2.5 font-bold">💥 一键清屏（砸碎全部）</button>
         <button id="resetBtn" class="bg-rose-600 hover:bg-rose-500 rounded-lg py-2.5 font-bold">🔄 重置场景</button>
         <details class="text-xs text-white/50">
           <summary class="cursor-pointer">手势说明</summary>
@@ -484,7 +485,7 @@
             <li><b class="text-amber-300">Q</b> 循环切换场景（办公室/空发泄房/卧室/厨房） · <b class="text-amber-300">R</b> 收拾残局复活碎物</li>
             <li><b class="text-amber-300">空格 / P</b> 暂停 · <b class="text-amber-300">M</b> 静音</li>
             <li><b class="text-amber-300">← / →</b> 循环切换选中对象</li>
-            <li><b class="text-amber-300">B</b> 怒气≥半时提前释放狂暴</li>
+            <li><b class="text-amber-300">B</b> 怒气≥半时提前释放狂暴 · <b class="text-amber-300">X</b> 一键清屏砸碎全部</li>
             <li><b class="text-amber-300">D</b> 开关调试面板</li>
             <li><b class="text-amber-300">? / H</b> 开关本说明</li>
             <li><b class="text-amber-300">Esc</b> 关闭弹窗</li>
@@ -2931,9 +2932,20 @@
       reader.readAsText(f);
       importSaveInput.value = '';
     });
+    // 💥 一键清屏：砸碎场上所有可碎物（无需怒气）
+    function shatterAll() {
+      if (state.paused) return;
+      const targets = state.objects.filter(o => !o.base && o.kind !== 'person' && o.state !== 'broken' && MATERIALS[o.mat] && MATERIALS[o.mat].breakable);
+      if (!targets.length) { spawnFloater(CANVAS_W / 2, 200, '已经没有可砸的东西啦', '#cbd5e1'); return; }
+      Sound.init(); Sound.resume();
+      state.shake = Math.max(state.shake, 30);
+      targets.forEach((o, i) => setTimeout(() => destroyObject(o), i * 45));
+      spawnFloater(CANVAS_W / 2, 180, '💥 全部砸碎！', '#ef4444');
+    }
+    document.getElementById('shatterBtn').addEventListener('click', shatterAll);
     // 首次全局点击解锁音频
-    window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); if (state.musicOn && !Sound.isMusicPlaying()) Sound.startMusic(); if (state.ambience !== 'off' && !ambRestored) { ambRestored = true; Sound.startAmbience(state.ambience); } }, { once: false });
     let ambRestored = false; // 环境音仅首次手势自动恢复，避免每次点击重启
+    window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); if (state.musicOn && !Sound.isMusicPlaying()) Sound.startMusic(); if (state.ambience !== 'off' && !ambRestored) { ambRestored = true; Sound.startAmbience(state.ambience); } }, { once: false });
     // 按 D 键切换调试面板
     window.addEventListener('keydown', (e) => {
       // 正在输入框/下拉框内打字时不触发全局快捷键（仅 Esc 收起焦点）
@@ -2953,6 +2965,8 @@
       if (e.key === 'ArrowLeft') { e.preventDefault(); cycleSelect(-1); return; }
       // B 提前手动释放狂暴（需怒气≥半且未暂停/未狂暴中）
       if (e.key === 'b' || e.key === 'B') { if (state.paused || state.berserk) return; if (state.rage >= 50) { triggerBerserk(); } else spawnFloater(CANVAS_W / 2, 200, '😤 怒气不足一半，多砸几下攒怒气！', '#fdba74'); return; }
+      // X 一键清屏（砸碎所有可碎物）
+      if (e.key === 'x' || e.key === 'X') { shatterAll(); return; }
       // 键盘 1-6 模拟手势
       const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
       if (simMap[e.key]) { simGesture(simMap[e.key]); }
