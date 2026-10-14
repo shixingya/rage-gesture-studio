@@ -118,6 +118,7 @@
         <button data-scene="office" class="scene-btn badge bg-white/15 hover:bg-white/25 rounded-lg px-3 py-2 text-sm text-left">🏢 办公室</button>
         <button data-scene="room" class="scene-btn badge bg-white/15 hover:bg-white/25 rounded-lg px-3 py-2 text-left text-sm">🧱 空发泄房</button>
         <button data-scene="bedroom" class="scene-btn badge bg-white/15 hover:bg-white/25 rounded-lg px-3 py-2 text-left text-sm">🛏️ 卧室</button>
+        <button data-scene="kitchen" class="scene-btn badge bg-white/15 hover:bg-white/25 rounded-lg px-3 py-2 text-left text-sm">🍳 厨房</button>
       </div>
 
       <!-- 成就弹框区（右上角堆叠） -->
@@ -451,7 +452,7 @@
           <ul class="space-y-1.5 text-white/70">
             <li><b class="text-amber-300">1</b> 出拳 · <b class="text-amber-300">2</b> 抛掷 · <b class="text-amber-300">3</b> 下拍</li>
             <li><b class="text-amber-300">4</b> 前推 · <b class="text-amber-300">5</b> 横扫 · <b class="text-amber-300">6</b> 吓唬</li>
-            <li><b class="text-amber-300">Q</b> 循环切换场景（办公室/空发泄房/卧室） · <b class="text-amber-300">R</b> 收拾残局复活碎物</li>
+            <li><b class="text-amber-300">Q</b> 循环切换场景（办公室/空发泄房/卧室/厨房） · <b class="text-amber-300">R</b> 收拾残局复活碎物</li>
             <li><b class="text-amber-300">空格 / P</b> 暂停 · <b class="text-amber-300">M</b> 静音</li>
             <li><b class="text-amber-300">← / →</b> 循环切换选中对象</li>
             <li><b class="text-amber-300">B</b> 怒气≥半时提前释放狂暴</li>
@@ -999,10 +1000,25 @@
       ];
     }
 
+    // 构建厨房场景（冰箱/水槽为固定件，其余可砸）
+    function buildKitchen() {
+      const floorY = 560;
+      return [
+        makeObj({ name: '冰箱', shape: 'fridge', x: 1120, y: floorY - 170, w: 150, h: 340, mat: 'metal', base: true }),
+        makeObj({ name: '水槽', shape: 'sink', x: 300, y: floorY - 60, w: 260, h: 120, mat: 'metal', base: true }),
+        makeObj({ name: '汤锅', shape: 'pot', x: 620, y: floorY - 60, w: 130, h: 110, mat: 'metal' }),
+        makeObj({ name: '平底锅', shape: 'pan', x: 760, y: floorY - 40, w: 120, h: 120, mat: 'metal' }),
+        makeObj({ name: '水壶', shape: 'kettle', x: 890, y: floorY - 55, w: 110, h: 110, mat: 'metal' }),
+        makeObj({ name: '鸡蛋', shape: 'egg', x: 500, y: floorY - 35, w: 60, h: 76, mat: 'glass' }),
+        makeObj({ name: '盘子', shape: 'plate', x: 1000, y: floorY - 30, w: 130, h: 54, mat: 'glass' }),
+        makeObj({ name: '水杯', shape: 'cup', x: 560, y: floorY - 150, w: 56, h: 84, mat: 'glass' }),
+      ];
+    }
+
     // 切换场景
     function setScene(name, fromUser) {
       state.scene = name;
-      state.objects = name === 'office' ? buildOffice() : name === 'bedroom' ? buildBedroom() : buildRoom();
+      state.objects = name === 'office' ? buildOffice() : name === 'bedroom' ? buildBedroom() : name === 'kitchen' ? buildKitchen() : buildRoom();
       state.particles = [];
       state.floaters = [];
       state.selectedId = null;
@@ -1286,6 +1302,56 @@
       },
     });
 
+    // 厨房新主题房专用图形（冰箱/水槽为固定件，锅/平底锅/水壶/鸡蛋可砸）
+    Object.assign(SHAPES, {
+      fridge(o) {
+        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = p.tint || '#dbe3ea';
+        sctx.beginPath(); sctx.roundRect ? sctx.roundRect(-o.w / 2, -o.h / 2, o.w, o.h, 10) : sctx.rect(-o.w / 2, -o.h / 2, o.w, o.h); sctx.fill();
+        sctx.strokeStyle = '#94a3b8'; sctx.lineWidth = 4; sctx.strokeRect(-o.w / 2, -o.h / 2, o.w, o.h);
+        sctx.beginPath(); sctx.moveTo(-o.w / 2, -o.h / 2 + o.h * 0.34); sctx.lineTo(o.w / 2, -o.h / 2 + o.h * 0.34); sctx.stroke();
+        sctx.fillStyle = '#475569'; sctx.fillRect(o.w / 2 - 16, -o.h / 2 + 14, 8, 40); sctx.fillRect(o.w / 2 - 16, -o.h / 2 + o.h * 0.42, 8, 46);
+        sctx.restore();
+      },
+      sink(o) {
+        sctx.save(); sctx.translate(o.x, o.y);
+        sctx.fillStyle = '#cbd5e1'; sctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+        sctx.fillStyle = '#94a3b8'; sctx.beginPath();
+        sctx.moveTo(-o.w / 2 + 10, -o.h / 2 + 8); sctx.lineTo(o.w / 2 - 10, -o.h / 2 + 8); sctx.lineTo(o.w / 2 - 22, o.h / 2 - 8); sctx.lineTo(-o.w / 2 + 22, o.h / 2 - 8); sctx.closePath(); sctx.fill();
+        sctx.strokeStyle = '#64748b'; sctx.lineWidth = 6; sctx.beginPath(); sctx.moveTo(0, -o.h / 2); sctx.quadraticCurveTo(0, -o.h / 2 - 30, 26, -o.h / 2 - 26); sctx.stroke();
+        sctx.restore();
+      },
+      pot(o) {
+        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = p.tint || '#a3a3a3'; sctx.fillRect(-o.w / 2, -o.h / 2 + 12, o.w, o.h - 12);
+        sctx.fillStyle = '#525252'; sctx.beginPath(); sctx.ellipse(0, -o.h / 2 + 12, o.w / 2, 12, 0, 0, 6.28); sctx.fill();
+        sctx.fillStyle = '#737373'; sctx.beginPath(); sctx.arc(0, -o.h / 2 + 4, 10, 0, 6.28); sctx.fill();
+        sctx.strokeStyle = '#404040'; sctx.lineWidth = 8; sctx.beginPath(); sctx.moveTo(-o.w / 2 - 20, -o.h / 2 + 30); sctx.lineTo(-o.w / 2, -o.h / 2 + 30); sctx.moveTo(o.w / 2, -o.h / 2 + 30); sctx.lineTo(o.w / 2 + 20, -o.h / 2 + 30); sctx.stroke();
+        sctx.restore();
+      },
+      pan(o) {
+        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = p.tint || '#3f3f46'; sctx.beginPath(); sctx.arc(0, 0, o.w / 2, 0, 6.28); sctx.fill();
+        sctx.fillStyle = '#18181b'; sctx.beginPath(); sctx.arc(0, 0, o.w / 2 - 12, 0, 6.28); sctx.fill();
+        sctx.fillStyle = '#78350f'; sctx.fillRect(o.w / 2 - 6, -8, o.w * 0.7, 16);
+        sctx.restore();
+      },
+      kettle(o) {
+        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = p.tint || '#f87171'; sctx.beginPath(); sctx.ellipse(0, o.h * 0.1, o.w * 0.42, o.h * 0.4, 0, 0, 6.28); sctx.fill();
+        sctx.beginPath(); sctx.moveTo(o.w * 0.3, -o.h * 0.1); sctx.lineTo(o.w * 0.52, -o.h * 0.28); sctx.lineTo(o.w * 0.4, -o.h * 0.05); sctx.closePath(); sctx.fill();
+        sctx.strokeStyle = p.tint || '#f87171'; sctx.lineWidth = 8; sctx.beginPath(); sctx.arc(-o.w * 0.02, -o.h * 0.28, o.w * 0.28, Math.PI * 1.1, Math.PI * 1.9); sctx.stroke();
+        sctx.fillStyle = '#374151'; sctx.beginPath(); sctx.arc(0, -o.h * 0.28, 8, 0, 6.28); sctx.fill();
+        sctx.restore();
+      },
+      egg(o) {
+        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        sctx.fillStyle = p.tint || '#fef3c7'; sctx.beginPath(); sctx.ellipse(0, 0, o.w * 0.42, o.h * 0.5, 0, 0, 6.28); sctx.fill();
+        sctx.fillStyle = 'rgba(255,255,255,.6)'; sctx.beginPath(); sctx.ellipse(-o.w * 0.12, -o.h * 0.16, o.w * 0.1, o.h * 0.14, 0, 0, 6.28); sctx.fill();
+        sctx.restore();
+      },
+    });
+
     // 绘制单个对象（包含状态动画）
     function drawObject(o, time) {
       if (o.state === 'broken') return;
@@ -1391,20 +1457,20 @@
     // ============================================================
     // 场景主题皮肤：控制墙面/地板/环境粒子基调色（随主题联动）
     const THEMES = {
-      day:   { office: ['#dbeafe', '#bfdbfe'], room: ['#e5e7eb', '#cbd5e1'], bedroom: ['#fce7f3', '#f5d0fe'], floorO: '#94a3b8', floorR: '#9ca3af', floorB: '#c9a27a', ambient: '255,255,255' },
-      night: { office: ['#1e293b', '#0f172a'], room: ['#111827', '#0b1120'], bedroom: ['#3b2f4a', '#1f1730'], floorO: '#334155', floorR: '#374151', floorB: '#4a3b52', ambient: '148,163,184' },
-      disco: { office: ['#312e81', '#1e1b4b'], room: ['#3b0764', '#1e1b4b'], bedroom: ['#6b21a8', '#3b0764'], floorO: '#4c1d95', floorR: '#4a044e', floorB: '#701a75', ambient: '255,255,255' },
+      day:   { office: ['#dbeafe', '#bfdbfe'], room: ['#e5e7eb', '#cbd5e1'], bedroom: ['#fce7f3', '#f5d0fe'], kitchen: ['#d0f0e8', '#a7e8d8'], floorO: '#94a3b8', floorR: '#9ca3af', floorB: '#c9a27a', floorK: '#e5e7eb', ambient: '255,255,255' },
+      night: { office: ['#1e293b', '#0f172a'], room: ['#111827', '#0b1120'], bedroom: ['#3b2f4a', '#1f1730'], kitchen: ['#0f3a3a', '#082020'], floorO: '#334155', floorR: '#374151', floorB: '#4a3b52', floorK: '#1f2937', ambient: '148,163,184' },
+      disco: { office: ['#312e81', '#1e1b4b'], room: ['#3b0764', '#1e1b4b'], bedroom: ['#6b21a8', '#3b0764'], kitchen: ['#155e75', '#0e7490'], floorO: '#4c1d95', floorR: '#4a044e', floorB: '#701a75', floorK: '#134e4a', ambient: '255,255,255' },
     };
     function drawBackground() {
       const T = THEMES[state.theme] || THEMES.day;
-      const stops = state.scene === 'office' ? T.office : state.scene === 'bedroom' ? T.bedroom : T.room;
+      const stops = state.scene === 'office' ? T.office : state.scene === 'bedroom' ? T.bedroom : state.scene === 'kitchen' ? T.kitchen : T.room;
       // 墙面
       const wall = sctx.createLinearGradient(0, 0, 0, CANVAS_H);
       wall.addColorStop(0, stops[0]); wall.addColorStop(1, stops[1]);
       sctx.fillStyle = wall;
       sctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
       // 地板
-      sctx.fillStyle = state.scene === 'office' ? T.floorO : state.scene === 'bedroom' ? T.floorB : T.floorR;
+      sctx.fillStyle = state.scene === 'office' ? T.floorO : state.scene === 'bedroom' ? T.floorB : state.scene === 'kitchen' ? T.floorK : T.floorR;
       sctx.fillRect(0, 560, CANVAS_W, CANVAS_H - 560);
       sctx.fillStyle = 'rgba(0,0,0,.06)';
       for (let x = 0; x < CANVAS_W; x += 80) sctx.fillRect(x, 560, 2, CANVAS_H - 560);
@@ -1439,6 +1505,19 @@
         // 墙面字牌
         sctx.fillStyle = 'rgba(124,92,191,.6)'; sctx.font = 'bold 30px "Comic Sans MS"'; sctx.textAlign = 'center';
         sctx.fillText('🌙 晚安 · 把烦恼砸碎', CANVAS_W / 2, 60); sctx.textAlign = 'left';
+      } else if (state.scene === 'kitchen') {
+        // 墙上瓷砖 backsplash
+        sctx.strokeStyle = 'rgba(255,255,255,.5)'; sctx.lineWidth = 2;
+        for (let y = 90; y < 300; y += 40) { sctx.beginPath(); sctx.moveTo(360, y); sctx.lineTo(920, y); sctx.stroke(); }
+        for (let x = 360; x <= 920; x += 40) { sctx.beginPath(); sctx.moveTo(x, 90); sctx.lineTo(x, 300); sctx.stroke(); }
+        // 抽油烟机
+        sctx.fillStyle = '#94a3b8'; sctx.beginPath(); sctx.moveTo(560, 90); sctx.lineTo(720, 90); sctx.lineTo(700, 150); sctx.lineTo(580, 150); sctx.closePath(); sctx.fill();
+        sctx.fillRect(618, 40, 44, 50);
+        // 台面
+        sctx.fillStyle = 'rgba(148,163,184,.5)'; sctx.fillRect(360, 500, 560, 20);
+        // 字牌
+        sctx.fillStyle = 'rgba(15,118,110,.65)'; sctx.font = 'bold 30px "Comic Sans MS"'; sctx.textAlign = 'center';
+        sctx.fillText('🍳 厨房重地 · 砸个痛快', CANVAS_W / 2, 60); sctx.textAlign = 'left';
       } else {
         sctx.fillStyle = 'rgba(239,68,68,.25)';
         sctx.font = 'bold 40px "Comic Sans MS"'; sctx.textAlign = 'center';
@@ -2807,7 +2886,7 @@
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') { if (e.key === 'Escape') e.target.blur(); return; }
       if (e.key === 'd' || e.key === 'D') { dbgVisible = !dbgVisible; const b = document.getElementById('dbgToggleBtn'); if (b) b.textContent = dbgVisible ? '🔧 调试面板：开 (D)' : '🔧 调试面板：关 (D)'; return; }
       // Q 快速切换场景
-      if (e.key === 'q' || e.key === 'Q') { const order = ['office','room','bedroom']; const next = order[(order.indexOf(state.scene) + 1) % order.length]; setScene(next, true); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
+      if (e.key === 'q' || e.key === 'Q') { const order = ['office','room','bedroom','kitchen']; const next = order[(order.indexOf(state.scene) + 1) % order.length]; setScene(next, true); document.querySelectorAll('.scene-btn').forEach(x => x.classList.toggle('active', x.dataset.scene === next)); return; }
       // R 收拾残局（复活碎物）
       if (e.key === 'r' || e.key === 'R') { reviveAllBroken(); return; }
       // M 静音切换
