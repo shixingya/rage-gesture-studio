@@ -192,6 +192,22 @@
         <p id="labelHint" class="text-[11px] text-white/40"></p>
       </section>
 
+      <!-- 物体上色 -->
+      <section class="flex flex-col gap-2">
+        <h2 class="font-bold text-white/80">🎨 上色 <span class="text-[11px] text-white/40 font-normal">先选中物体</span></h2>
+        <div class="flex flex-wrap gap-1.5">
+          <button class="color-sw-btn rounded-full w-8 h-8 border border-white/20" data-color="#ef4444" style="background:#ef4444"></button>
+          <button class="color-sw-btn rounded-full w-8 h-8 border border-white/20" data-color="#f97316" style="background:#f97316"></button>
+          <button class="color-sw-btn rounded-full w-8 h-8 border border-white/20" data-color="#facc15" style="background:#facc15"></button>
+          <button class="color-sw-btn rounded-full w-8 h-8 border border-white/20" data-color="#22c55e" style="background:#22c55e"></button>
+          <button class="color-sw-btn rounded-full w-8 h-8 border border-white/20" data-color="#38bdf8" style="background:#38bdf8"></button>
+          <button class="color-sw-btn rounded-full w-8 h-8 border border-white/20" data-color="#a855f7" style="background:#a855f7"></button>
+          <button class="color-sw-btn rounded-full w-8 h-8 border border-white/20" data-color="#ec4899" style="background:#ec4899"></button>
+          <input id="colorPick" type="color" value="#8b5cf6" class="w-8 h-8 rounded-full border border-white/20 bg-transparent cursor-pointer" title="自定义取色" />
+          <button id="colorResetBtn" class="badge bg-white/10 hover:bg-white/20 rounded-lg px-2.5 text-xs">还原</button>
+        </div>
+      </section>
+
       <!-- 灯光设置 -->
       <section class="flex flex-col gap-3">
         <h2 class="font-bold text-white/80">💡 灯光设置</h2>
@@ -949,6 +965,12 @@
         default:        return { alpha: 1.0,  shine: '#ffffff', tint: null }; // plastic
       }
     }
+    // 对象调色板：在材质基础上，若设了自定义颜色则覆盖 tint
+    function objPalette(o) {
+      const p = materialPalette(o.mat);
+      if (o.color) { p.tint = o.color; p.shine = 'rgba(255,255,255,.55)'; if (p.alpha < 0.95) p.alpha = 0.95; }
+      return p;
+    }
 
     // 创建一个场景对象
     function makeObj(o) {
@@ -1060,7 +1082,7 @@
     const SHAPES = {
       // 办公桌（固定基础，不参与丢弃）
       desk(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#c68a4a';
         sctx.fillRect(-o.w / 2, -o.h / 2, o.w, 26);          // 桌面
@@ -1070,7 +1092,7 @@
         sctx.restore();
       },
       computer(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = '#334';
         sctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h - 30);        // 显示器
@@ -1082,7 +1104,7 @@
         sctx.restore();
       },
       cup(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#7dd3fc';
         sctx.beginPath();
@@ -1107,7 +1129,7 @@
         sctx.restore();
       },
       lamp(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y);
         sctx.lineJoin = 'round';
         // 灯杆（深色，与亮墙高对比）
@@ -1128,7 +1150,7 @@
       },
       // 玻璃瓶
       bottle(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#a7f3d0';
         sctx.beginPath();
@@ -1143,7 +1165,7 @@
         sctx.restore();
       },
       plate(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#e2e8f0';
         sctx.beginPath(); sctx.ellipse(0, 0, o.w / 2, o.h / 2, 0, 0, Math.PI * 2); sctx.fill();
@@ -1154,7 +1176,7 @@
         sctx.restore();
       },
       plank(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y);
         sctx.fillStyle = p.tint || '#b5651d';
         sctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
@@ -1163,7 +1185,7 @@
         sctx.restore();
       },
       bucket(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y);
         sctx.fillStyle = p.tint || '#38bdf8';
         sctx.beginPath();
@@ -1175,7 +1197,7 @@
       },
       // 键盘
       keyboard(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y);
         sctx.fillStyle = p.tint || '#e2e8f0';
         sctx.beginPath(); sctx.roundRect ? sctx.roundRect(-o.w/2, -o.h/2, o.w, o.h, 8) : sctx.rect(-o.w/2, -o.h/2, o.w, o.h); sctx.fill();
@@ -1185,7 +1207,7 @@
       },
       // 打印机
       printer(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y);
         sctx.fillStyle = p.tint || '#94a3b8';
         sctx.fillRect(-o.w/2, -o.h/4, o.w, o.h/2 + o.h/4);
@@ -1196,7 +1218,7 @@
       },
       // 电视
       tv(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = '#1e293b';
         sctx.beginPath(); sctx.roundRect ? sctx.roundRect(-o.w/2, -o.h/2, o.w, o.h, 10) : sctx.rect(-o.w/2, -o.h/2, o.w, o.h); sctx.fill();
@@ -1208,7 +1230,7 @@
       },
       // 花瓶
       vase(o) {
-        const p = materialPalette(o.mat);
+        const p = objPalette(o);
         sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#f0abfc';
         sctx.beginPath();
@@ -1275,7 +1297,7 @@
         sctx.restore();
       },
       alarm(o) {
-        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        const p = objPalette(o); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = '#ef4444';
         sctx.beginPath(); sctx.arc(-o.w * 0.28, -o.h * 0.36, o.w * 0.14, 0, 6.28); sctx.arc(o.w * 0.28, -o.h * 0.36, o.w * 0.14, 0, 6.28); sctx.fill();
         sctx.fillStyle = p.tint || '#f87171'; sctx.beginPath(); sctx.arc(0, 0, o.w * 0.42, 0, 6.28); sctx.fill();
@@ -1284,7 +1306,7 @@
         sctx.restore();
       },
       phone(o) {
-        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        const p = objPalette(o); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#1f2937';
         if (sctx.roundRect) { sctx.beginPath(); sctx.roundRect(-o.w / 2, -o.h / 2, o.w, o.h, 12); sctx.fill(); } else sctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
         sctx.fillStyle = 'rgba(125,211,252,0.92)';
@@ -1315,7 +1337,7 @@
     // 厨房新主题房专用图形（冰箱/水槽为固定件，锅/平底锅/水壶/鸡蛋可砸）
     Object.assign(SHAPES, {
       fridge(o) {
-        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        const p = objPalette(o); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#dbe3ea';
         sctx.beginPath(); sctx.roundRect ? sctx.roundRect(-o.w / 2, -o.h / 2, o.w, o.h, 10) : sctx.rect(-o.w / 2, -o.h / 2, o.w, o.h); sctx.fill();
         sctx.strokeStyle = '#94a3b8'; sctx.lineWidth = 4; sctx.strokeRect(-o.w / 2, -o.h / 2, o.w, o.h);
@@ -1332,7 +1354,7 @@
         sctx.restore();
       },
       pot(o) {
-        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        const p = objPalette(o); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#a3a3a3'; sctx.fillRect(-o.w / 2, -o.h / 2 + 12, o.w, o.h - 12);
         sctx.fillStyle = '#525252'; sctx.beginPath(); sctx.ellipse(0, -o.h / 2 + 12, o.w / 2, 12, 0, 0, 6.28); sctx.fill();
         sctx.fillStyle = '#737373'; sctx.beginPath(); sctx.arc(0, -o.h / 2 + 4, 10, 0, 6.28); sctx.fill();
@@ -1340,14 +1362,14 @@
         sctx.restore();
       },
       pan(o) {
-        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        const p = objPalette(o); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#3f3f46'; sctx.beginPath(); sctx.arc(0, 0, o.w / 2, 0, 6.28); sctx.fill();
         sctx.fillStyle = '#18181b'; sctx.beginPath(); sctx.arc(0, 0, o.w / 2 - 12, 0, 6.28); sctx.fill();
         sctx.fillStyle = '#78350f'; sctx.fillRect(o.w / 2 - 6, -8, o.w * 0.7, 16);
         sctx.restore();
       },
       kettle(o) {
-        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        const p = objPalette(o); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#f87171'; sctx.beginPath(); sctx.ellipse(0, o.h * 0.1, o.w * 0.42, o.h * 0.4, 0, 0, 6.28); sctx.fill();
         sctx.beginPath(); sctx.moveTo(o.w * 0.3, -o.h * 0.1); sctx.lineTo(o.w * 0.52, -o.h * 0.28); sctx.lineTo(o.w * 0.4, -o.h * 0.05); sctx.closePath(); sctx.fill();
         sctx.strokeStyle = p.tint || '#f87171'; sctx.lineWidth = 8; sctx.beginPath(); sctx.arc(-o.w * 0.02, -o.h * 0.28, o.w * 0.28, Math.PI * 1.1, Math.PI * 1.9); sctx.stroke();
@@ -1355,7 +1377,7 @@
         sctx.restore();
       },
       egg(o) {
-        const p = materialPalette(o.mat); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
+        const p = objPalette(o); sctx.save(); sctx.translate(o.x, o.y); sctx.globalAlpha = p.alpha;
         sctx.fillStyle = p.tint || '#fef3c7'; sctx.beginPath(); sctx.ellipse(0, 0, o.w * 0.42, o.h * 0.5, 0, 0, 6.28); sctx.fill();
         sctx.fillStyle = 'rgba(255,255,255,.6)'; sctx.beginPath(); sctx.ellipse(-o.w * 0.12, -o.h * 0.16, o.w * 0.1, o.h * 0.14, 0, 0, 6.28); sctx.fill();
         sctx.restore();
@@ -2674,6 +2696,18 @@
     labelInput.addEventListener('keydown', e => { if (e.key === 'Enter') setLabel(labelInput.value); });
     document.getElementById('labelClearBtn').addEventListener('click', () => setLabel(''));
     document.querySelectorAll('.label-preset').forEach(b => b.addEventListener('click', () => { labelInput.value = b.dataset.label; setLabel(b.dataset.label); }));
+    // —— 🎨 物体上色：给选中对象设自定义颜色 ——
+    function setObjectColor(color) {
+      const o = selectedObj();
+      if (!o) { spawnFloater(CANVAS_W / 2, 200, '请先选中一个物体', '#fdba74'); return; }
+      if (o.base) { spawnFloater(o.x, o.y - o.h / 2 - 30, '固定件不能上色', '#fca5a5'); return; }
+      o.color = color;
+      spawnFloater(o.x, o.y - o.h / 2 - 30, color ? '🎨 已上色' : '🎨 已还原', color || '#cbd5e1');
+      Sound.click();
+    }
+    document.querySelectorAll('.color-sw-btn').forEach(b => b.addEventListener('click', () => setObjectColor(b.dataset.color)));
+    document.getElementById('colorPick').addEventListener('input', (e) => setObjectColor(e.target.value));
+    document.getElementById('colorResetBtn').addEventListener('click', () => setObjectColor(null));
     // 刷新对象下拉列表
     function refreshObjectSelect() {
       objSelect.innerHTML = '<option value="">-- 选择目标 --</option>' +
