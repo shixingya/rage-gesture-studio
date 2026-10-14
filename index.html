@@ -318,6 +318,11 @@
           <button id="statsBtn" class="bg-violet-700 hover:bg-violet-600 rounded-lg py-2 text-sm font-bold">📊 生涯</button>
           <button id="randomMatBtn" class="bg-pink-700 hover:bg-pink-600 rounded-lg py-2 text-sm font-bold">🎲 大乱斗</button>
         </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="exportSaveBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">📥 导出存档</button>
+          <button id="importSaveBtn" class="bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">📤 导入存档</button>
+          <input id="importSaveInput" type="file" accept="application/json,.json" class="hidden" />
+        </div>
         <button id="resetBtn" class="bg-rose-600 hover:bg-rose-500 rounded-lg py-2.5 font-bold">🔄 重置场景</button>
         <details class="text-xs text-white/50">
           <summary class="cursor-pointer">手势说明</summary>
@@ -568,7 +573,16 @@
           localStorage.setItem(KEY, JSON.stringify(Object.assign(cur, patch)));
         } catch (e) { /* 隐私模式等写入失败则忽略 */ }
       }
-      return { load, save };
+      function exportRaw() { try { return localStorage.getItem(KEY) || '{}'; } catch (e) { return '{}'; } }
+      function importRaw(text) {
+        try {
+          const obj = JSON.parse(text);
+          if (!obj || typeof obj !== 'object') return false;
+          localStorage.setItem(KEY, JSON.stringify(obj));
+          return true;
+        } catch (e) { return false; }
+      }
+      return { load, save, exportRaw, importRaw };
     })();
 
     // ============================================================
@@ -2751,6 +2765,36 @@
       refreshObjectSelect();
       const o = selectedObj(); if (o && !o.base && o.kind !== 'person') highlightMat(o.mat);
       spawnFloater(CANVAS_W / 2, 200, '🎲 已随机 ' + n + ' 个材质！', '#f9a8d4');
+    });
+    // 📥 导出存档：将本地设置/成就/排行榜下载为 JSON
+    document.getElementById('exportSaveBtn').addEventListener('click', () => {
+      Sound.click();
+      const blob = new Blob([Store.exportRaw()], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'rage-gesture-save.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      spawnFloater(CANVAS_W / 2, 200, '📥 存档已导出', '#7dd3fc');
+    });
+    // 📤 导入存档：选择 JSON 文件覆盖本地数据并刷新
+    const importSaveInput = document.getElementById('importSaveInput');
+    document.getElementById('importSaveBtn').addEventListener('click', () => { Sound.click(); importSaveInput.click(); });
+    importSaveInput.addEventListener('change', () => {
+      const f = importSaveInput.files && importSaveInput.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (Store.importRaw(String(reader.result))) {
+          spawnFloater(CANVAS_W / 2, 200, '✅ 导入成功，刷新中…', '#86efac');
+          setTimeout(() => location.reload(), 700);
+        } else {
+          spawnFloater(CANVAS_W / 2, 200, '❌ 存档文件无效', '#fca5a5');
+        }
+      };
+      reader.onerror = () => spawnFloater(CANVAS_W / 2, 200, '❌ 读取失败', '#fca5a5');
+      reader.readAsText(f);
+      importSaveInput.value = '';
     });
     // 首次全局点击解锁音频
     window.addEventListener('pointerdown', () => { Sound.init(); Sound.resume(); if (state.musicOn && !Sound.isMusicPlaying()) Sound.startMusic(); if (state.ambience !== 'off' && !ambRestored) { ambRestored = true; Sound.startAmbience(state.ambience); } }, { once: false });
