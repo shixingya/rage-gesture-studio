@@ -54,6 +54,11 @@
       <h1 class="text-2xl font-black text-white/90">😤 写实宣泄室 <span class="text-sm font-normal text-white/50">3D Beta</span></h1>
       <p class="text-xs text-white/50 mt-1">Three.js 实时渲染 · PBR 材质 · 真实光照与物理 · 鼠标可旋转/拖拽砸物</p>
     </div>
+    <div id="scoreBox" class="absolute left-5 top-24 overlay-title">
+      <div class="text-3xl font-black text-white/90" id="scoreVal">0</div>
+      <div class="text-xs text-white/50">宣泄值</div>
+    </div>
+    <div id="toast" class="overlay-title" style="position:absolute; left:50%; top:32%; transform:translateX(-50%) translateY(-12px); font-size:28px; font-weight:900; opacity:0; transition:opacity .25s, transform .25s; text-shadow:0 2px 10px rgba(0,0,0,.7);"></div>
     <div id="dropzone" class="pointer-events-auto">
       <h2 class="font-bold text-sm mb-2 text-white/80">控制</h2>
       <button id="smashAllBtn" class="w-full mb-2 bg-red-600 hover:bg-red-500 rounded-lg py-2 text-sm font-bold">💥 砸碎全部</button>
@@ -219,6 +224,14 @@
         for (let i = 0; i < 8000; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * contrast})`; x.fillRect(Math.random() * s, Math.random() * s, 3, 3); }
       });
     }
+    function artTexture() {
+      return makeCanvas(256, (x, s) => {
+        const g = x.createLinearGradient(0, 0, s, s);
+        g.addColorStop(0, `hsl(${Math.random() * 360 | 0},55%,45%)`); g.addColorStop(1, `hsl(${Math.random() * 360 | 0},50%,25%)`);
+        x.fillStyle = g; x.fillRect(0, 0, s, s);
+        for (let i = 0; i < 14; i++) { x.fillStyle = `hsla(${Math.random() * 360 | 0},60%,60%,.5)`; x.beginPath(); x.arc(Math.random() * s, Math.random() * s, Math.random() * 40 + 6, 0, 7); x.fill(); }
+      });
+    }
 
     // ============================================================
     // 物理世界
@@ -239,6 +252,7 @@
     // 房间（写实：木/瓷砖/墙面 PBR）
     // ============================================================
     const ROOM = { w: 16, d: 16, h: 5 };
+    let motes = null;
     function buildRoom() {
       const floorTex = tileTexture(); floorTex.repeat.set(8, 8);
       const floorRough = roughMap('#8a8a8a', 0.25); floorRough.repeat.set(8, 8);
@@ -265,6 +279,31 @@
       for (const [lx, lz] of [[-1.5, -0.8], [1.5, -0.8], [-1.5, 0.8], [1.5, 0.8]]) {
         const leg = new THREE.Mesh(legGeo, woodMat); leg.position.set(lx, 0.5, lz); leg.castShadow = true; scene.add(leg);
       }
+
+      // 窗户（后墙）：窗框 + 自发光玻璃窗面 + 窗棂 + 透进来的体积光
+      const winW = 2.8, winH = 1.9, wx = 2.8, wy = 2.7, wz = -ROOM.d / 2;
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a2a30, roughness: 0.6, metalness: 0.3 });
+      const paneMat = new THREE.MeshStandardMaterial({ color: 0xbfe0ff, emissive: 0x9ecbff, emissiveIntensity: 1.6, roughness: 0.1 });
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(winW + 0.24, winH + 0.24, 0.12), frameMat); frame.position.set(wx, wy, wz + 0.06); scene.add(frame);
+      const pane = new THREE.Mesh(new THREE.PlaneGeometry(winW, winH), paneMat); pane.position.set(wx, wy, wz + 0.12); scene.add(pane);
+      const mullV = new THREE.Mesh(new THREE.BoxGeometry(0.06, winH, 0.14), frameMat); mullV.position.set(wx, wy, wz + 0.13); scene.add(mullV);
+      const mullH = new THREE.Mesh(new THREE.BoxGeometry(winW, 0.06, 0.14), frameMat); mullH.position.set(wx, wy, wz + 0.13); scene.add(mullH);
+      const shaft = new THREE.SpotLight(0xdceaff, 60, 24, 0.55, 0.5, 1.1);
+      shaft.position.set(wx, wy, wz + 0.5); shaft.target.position.set(wx - 3.5, 0.4, 2.5); scene.add(shaft); scene.add(shaft.target);
+
+      // 墙上装饰画框
+      const artMat = new THREE.MeshStandardMaterial({ color: 0x33373f, roughness: 0.5, metalness: 0.2 });
+      for (const [ax, ay] of [[-3.4, 2.9], [-5.0, 2.5]]) {
+        const f = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.06), artMat); f.position.set(ax, ay, wz + 0.05); scene.add(f);
+        const cv = new THREE.Mesh(new THREE.PlaneGeometry(0.76, 1.06), new THREE.MeshStandardMaterial({ map: artTexture(), roughness: 0.9 })); cv.position.set(ax, ay, wz + 0.09); scene.add(cv);
+      }
+
+      // 氛围浮尘（真实感：空气中缓慢漂浮的微粒）
+      const moteGeo = new THREE.BufferGeometry(); const N = 280, arr = new Float32Array(N * 3);
+      for (let i = 0; i < N; i++) { arr[i * 3] = rand(-6, 6); arr[i * 3 + 1] = rand(0.2, 4.3); arr[i * 3 + 2] = rand(-6, 6); }
+      moteGeo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+      motes = new THREE.Points(moteGeo, new THREE.PointsMaterial({ color: 0xfff2d8, size: 0.02, transparent: true, opacity: 0.5, depthWrite: false }));
+      scene.add(motes);
     }
     buildRoom();
 
@@ -273,6 +312,7 @@
     // ============================================================
     const dynObjects = [];   // { mesh, body, kind, breakable }
     let objId = 0;
+    let score = 0, combo = 0, comboTimer = null;
 
     function pbrMaterial(kind) {
       if (kind === 'glass') return new THREE.MeshPhysicalMaterial({ color: 0xbfe3ff, metalness: 0, roughness: 0.05, transmission: 0.9, thickness: 0.6, ior: 1.5, clearcoat: 1, transparent: true, opacity: 0.9 });
@@ -281,13 +321,14 @@
       if (kind === 'wood') { const t = woodTexture(); t.repeat.set(1, 1); return new THREE.MeshStandardMaterial({ map: t, roughness: 0.7, metalness: 0.05 }); }
       return new THREE.MeshStandardMaterial({ color: 0xd9534f, roughness: 0.5, metalness: 0.1 });
     }
+    function lathe(points, seg) { return new THREE.LatheGeometry(points.map(p => new THREE.Vector2(p[0], p[1])), seg || 32); }
     function geoFor(shape) {
-      if (shape === 'bottle') return new THREE.CylinderGeometry(0.09, 0.12, 0.42, 24);
+      if (shape === 'bottle') return lathe([[0, 0], [0.11, 0], [0.12, 0.05], [0.12, 0.26], [0.085, 0.32], [0.05, 0.36], [0.05, 0.44], [0.045, 0.46], [0, 0.46]]);
       if (shape === 'mug') return new THREE.CylinderGeometry(0.11, 0.10, 0.22, 28);
       if (shape === 'can') return new THREE.CylinderGeometry(0.09, 0.09, 0.24, 28);
       if (shape === 'crate') return new THREE.BoxGeometry(0.32, 0.32, 0.32);
       if (shape === 'plate') return new THREE.CylinderGeometry(0.2, 0.2, 0.03, 32);
-      if (shape === 'vase') return new THREE.CylinderGeometry(0.07, 0.13, 0.4, 28);
+      if (shape === 'vase') return lathe([[0, 0], [0.13, 0], [0.14, 0.06], [0.10, 0.22], [0.09, 0.32], [0.12, 0.40], [0.11, 0.44], [0.075, 0.46], [0, 0.46]]);
       return new THREE.BoxGeometry(0.25, 0.25, 0.25);
     }
     function shapeToCannon(shape, geo) {
@@ -297,9 +338,11 @@
       return new CANNON.Cylinder(r, r, h * 2, 16);
     }
     function spawnObject(def) {
-      const geo = geoFor(def.shape);
+      const geo = geoFor(def.shape); geo.center();
       const mesh = new THREE.Mesh(geo, pbrMaterial(def.kind));
       mesh.castShadow = true; mesh.receiveShadow = true;
+      if (def.shape === 'mug') { const h = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.02, 12, 24), mesh.material); h.position.set(0.12, 0, 0); h.rotation.y = Math.PI / 2; h.castShadow = true; mesh.add(h); }
+      if (def.shape === 'can') { const top = new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.088, 0.012, 28), new THREE.MeshStandardMaterial({ color: 0xb8bec7, metalness: 1, roughness: 0.3 })); top.position.y = 0.125; mesh.add(top); }
       const px = def.x, py = def.y, pz = def.z;
       mesh.position.set(px, py, pz); scene.add(mesh);
       const body = new CANNON.Body({ mass: def.mass || 0.6, material: matObj, position: new CANNON.Vec3(px, py, pz) });
@@ -351,6 +394,10 @@
       Sound.crash(rec.kind);
       spawnDust(center, 14);
       rec.mesh.geometry.dispose();
+      combo++; if (comboTimer) clearTimeout(comboTimer); comboTimer = setTimeout(() => { combo = 0; }, 2500);
+      score += (rec.kind === 'glass' ? 150 : rec.kind === 'metal' ? 120 : rec.kind === 'ceramic' ? 100 : 80);
+      updateScoreHud();
+      if (combo > 1) toast('连击 ×' + combo, combo >= 5 ? '#fca5a5' : '#fdba74');
     }
 
     // 简单尘埃粒子
@@ -365,6 +412,8 @@
       }
     }
     function rand(a, b) { return a + Math.random() * (b - a); }
+    function updateScoreHud() { const s = document.getElementById('scoreVal'); if (s) s.textContent = score.toLocaleString(); }
+    function toast(text, color) { const t = document.getElementById('toast'); if (!t) return; t.textContent = text; t.style.color = color || '#fff'; t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)'; clearTimeout(toast._h); toast._h = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(-12px)'; }, 900); }
 
     // ============================================================
     // 交互：射线拾取 + 单击击飞 + 拖拽抛掷
@@ -465,6 +514,7 @@
         d.mesh.material.opacity = Math.max(0, 0.6 * (1 - age / 1.2));
         if (age > 1.2) { scene.remove(d.mesh); d.mesh.geometry.dispose(); d.mesh.material.dispose(); dust.splice(i, 1); }
       }
+      if (motes) { const pa = motes.geometry.attributes.position.array; for (let i = 1; i < pa.length; i += 3) { pa[i] += dt * 0.06; if (pa[i] > 4.4) pa[i] = 0.2; } motes.geometry.attributes.position.needsUpdate = true; motes.rotation.y += dt * 0.012; }
       controls.update();
       renderer.render(scene, camera);
     }
