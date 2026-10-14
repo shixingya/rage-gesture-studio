@@ -264,6 +264,14 @@
           <span class="text-xs text-white/60">人体骨架叠加主场景</span>
           <input id="bodyStageToggle" type="checkbox" class="w-5 h-5 accent-orange-500" />
         </label>
+        <div class="flex flex-col gap-1">
+          <span class="text-xs text-white/60">挑战难度</span>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button data-diff="chill" class="diff-btn badge bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">🌿 休闲</button>
+            <button data-diff="normal" class="diff-btn badge bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">⚔️ 普通</button>
+            <button data-diff="hell" class="diff-btn badge bg-white/10 hover:bg-white/20 rounded-lg py-1.5 text-xs">🔥 地狱</button>
+          </div>
+        </div>
         <button id="challengeBtn" class="bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 text-sm font-bold">⏱ 开始 60 秒挑战</button>
         <button id="lbBtn" class="bg-sky-600 hover:bg-sky-500 rounded-lg py-2 text-sm font-bold">🏅 排行榜 Top5</button>
         <p class="text-[11px] text-white/40">成就：已解锁 <span id="achCount">0</span>/<span id="achTotal">0</span>　<button id="achListBtn" class="underline">查看</button></p>
@@ -533,7 +541,7 @@
       unlockedAch: [],        // 已解锁成就 id
       celebrated: [],         // 本局已庆祝的分数里程碑
       quests: null,           // 每日目标系统（initQuests 初始化）
-      challenge: { active: false, timeLeft: 60, score: 0, spawnTimer: 0, best: 0, scores: [] },
+      challenge: { active: false, timeLeft: 60, score: 0, spawnTimer: 0, best: 0, scores: [], diff: 'normal' },
     };
 
     // 交互用：当前被"抓住"拖动的对象（鼠标或手势共用）
@@ -1828,6 +1836,12 @@
       { shape: 'vase', w: 64, h: 120, mat: 'glass' },
       { shape: 'printer', w: 120, h: 84, mat: 'plastic' },
     ];
+    // 挑战难度分级：时长/刷新间隔/同屏上限
+    const CHALLENGE_DIFFICULTY = {
+      chill:  { label: '🌿 休闲', time: 60, spawn: 2.4, maxLive: 5 },
+      normal: { label: '⚔️ 普通', time: 45, spawn: 1.8, maxLive: 6 },
+      hell:   { label: '🔥 地狱', time: 30, spawn: 1.0, maxLive: 8 },
+    };
     const challengeBarEl = document.getElementById('challengeBar');
     const challengeTimeEl = document.getElementById('challengeTime');
     const challengeScoreEl = document.getElementById('challengeScore');
@@ -1836,25 +1850,26 @@
       if (challengeScoreEl) challengeScoreEl.textContent = state.challenge.score;
     }
     function startChallenge() {
+      const D = CHALLENGE_DIFFICULTY[state.challenge.diff] || CHALLENGE_DIFFICULTY.normal;
       // 清空现有可碎物，只保留基础桌面
       state.objects = state.objects.filter(o => o.base);
       state.challenge.active = true;
-      state.challenge.timeLeft = 60;
+      state.challenge.timeLeft = D.time;
       state.challenge.score = 0;
-      state.challenge.spawnTimer = 0;
+      state.challenge.spawnTimer = D.spawn;
       state.score = 0; updateScoreUI();
       state.celebrated = [];
       state.breakCount = 0; updateBreakUI();
       if (challengeBarEl) { challengeBarEl.classList.remove('hidden'); challengeBarEl.classList.add('flex'); }
       const btn = document.getElementById('challengeBtn'); if (btn) btn.textContent = '⏱ 挑战进行中…';
       updateChallengeUI();
-      spawnFloater(CANVAS_W / 2, 200, '⏱ 60 秒挑战开始！', '#34d399');
+      spawnFloater(CANVAS_W / 2, 200, D.label + ' 挑战开始！', '#34d399');
       for (let i = 0; i < 3; i++) spawnChallengeTarget();
     }
     function endChallenge() {
       state.challenge.active = false;
       if (challengeBarEl) { challengeBarEl.classList.add('hidden'); challengeBarEl.classList.remove('flex'); }
-      const btn = document.getElementById('challengeBtn'); if (btn) btn.textContent = '⏱ 开始 60 秒挑战';
+      const btn = document.getElementById('challengeBtn'); if (btn) updateChallengeBtnLabel();
       if (state.challenge.score > (state.challenge.best || 0)) { state.challenge.best = state.challenge.score; Store.save({ challengeBest: state.challenge.best }); }
       // 写入本地排行榜（Top5，按分数降序）
       if (state.challenge.score > 0) {
@@ -1951,8 +1966,9 @@
     }
     // 随机生成一个挑战目标（限制场上数量，直接落位静置供击打）
     function spawnChallengeTarget() {
+      const D = CHALLENGE_DIFFICULTY[state.challenge.diff] || CHALLENGE_DIFFICULTY.normal;
       const live = state.objects.filter(o => !o.base && o.state !== 'broken');
-      if (live.length >= 6) return;
+      if (live.length >= D.maxLive) return;
       const spec = CHALLENGE_TARGET_SHAPES[Math.floor(Math.random() * CHALLENGE_TARGET_SHAPES.length)];
       const x = rand(240, CANVAS_W - 200);
       const floorY = state.scene === 'office' ? 500 : 560;
@@ -1968,7 +1984,7 @@
       if (!(dt > 0)) return;              // 防负/NaN 帧步进
       state.challenge.timeLeft -= dt;
       state.challenge.spawnTimer -= dt;
-      if (state.challenge.spawnTimer <= 0) { spawnChallengeTarget(); state.challenge.spawnTimer = 1.8; }
+      if (state.challenge.spawnTimer <= 0) { spawnChallengeTarget(); state.challenge.spawnTimer = (CHALLENGE_DIFFICULTY[state.challenge.diff] || CHALLENGE_DIFFICULTY.normal).spawn; }
       if (state.challenge.timeLeft <= 0) { state.challenge.timeLeft = 0; endChallenge(); }
       updateChallengeUI();
     }
@@ -2814,6 +2830,18 @@
     dbgToggleBtn.addEventListener('click', () => { dbgVisible = !dbgVisible; dbgToggleBtn.textContent = dbgVisible ? '🔧 调试面板：开 (D)' : '🔧 调试面板：关 (D)'; });
     // 挑战模式按钮
     document.getElementById('challengeBtn').addEventListener('click', () => { Sound.init(); Sound.resume(); if (!state.challenge.active) startChallenge(); });
+    // 挑战难度选择
+    function updateChallengeBtnLabel() {
+      const D = CHALLENGE_DIFFICULTY[state.challenge.diff] || CHALLENGE_DIFFICULTY.normal;
+      const btn = document.getElementById('challengeBtn');
+      if (btn && !state.challenge.active) btn.textContent = '⏱ 开始 ' + D.time + ' 秒挑战（' + D.label + '）';
+    }
+    function highlightDiff(t) { document.querySelectorAll('.diff-btn').forEach(b => b.classList.toggle('active', b.dataset.diff === t)); }
+    document.querySelectorAll('.diff-btn').forEach(b => b.addEventListener('click', () => {
+      if (state.challenge.active) { spawnFloater(CANVAS_W / 2, 200, '挑战进行中，暂不能改难度', '#fca5a5'); return; }
+      Sound.click(); state.challenge.diff = b.dataset.diff; highlightDiff(state.challenge.diff); updateChallengeBtnLabel(); Store.save({ challengeDiff: state.challenge.diff });
+    }));
+    highlightDiff(state.challenge.diff); updateChallengeBtnLabel();
     // 成就列表查看（弹框逐条）
     document.getElementById('achListBtn').addEventListener('click', () => {
       if (!achToastBox) return;
@@ -2886,6 +2914,7 @@
       if (typeof s.bestCombo === 'number') state.bestCombo = s.bestCombo;
       if (typeof s.musicOn === 'boolean') { state.musicOn = s.musicOn; document.getElementById('musicToggle').checked = s.musicOn; /* 音乐需用户手势启动，此处仅同步开关态，不自动播放 */ }
       if (s.ambience === 'rain' || s.ambience === 'wind') { state.ambience = s.ambience; highlightAmb(s.ambience); /* 环境音同样需手势启动，此处仅高亮，pointerdown 时恢复 */ }
+      if (CHALLENGE_DIFFICULTY[s.challengeDiff]) { state.challenge.diff = s.challengeDiff; highlightDiff(s.challengeDiff); updateChallengeBtnLabel(); }
       if (Array.isArray(s.unlockedAch)) state.unlockedAch = s.unlockedAch.slice();
       if (typeof s.challengeBest === 'number') state.challenge.best = s.challengeBest;
       if (Array.isArray(s.challengeScores)) state.challenge.scores = s.challengeScores.slice();
