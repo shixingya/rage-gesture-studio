@@ -8,6 +8,9 @@
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
+  <!-- MediaPipe Hands：手势识别（由用户手势启动摄像头，避免 Permissions Policy 拦截） -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+
   <!-- Three.js + cannon-es：通过 importmap 以 ESM 方式加载（3D 版依赖外部引擎，已获许可） -->
   <script type="importmap">
   {
@@ -35,6 +38,9 @@
       position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 14px; background: #0b0d12; color: #cbd5e1; z-index: 50;
     }
+    #camBox { position: absolute; right: 16px; bottom: 16px; width: 200px; height: 150px; border-radius: 12px; overflow: hidden; border: 2px solid rgba(255,255,255,.35); background: #000; z-index: 40; display: none; }
+    #camVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    #gestureTag { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); background: rgba(15,18,26,.7); border: 1px solid rgba(255,255,255,.15); color: #fff; padding: 6px 16px; border-radius: 999px; font-size: 13px; display: none; z-index: 40; }
     .bar { width: 220px; height: 4px; background: rgba(255,255,255,.12); border-radius: 99px; overflow: hidden; }
     .bar > i { display: block; height: 100%; width: 40%; background: linear-gradient(90deg,#f97316,#ef4444); animation: slide 1.1s infinite; }
     @keyframes slide { 0% { margin-left:-40% } 100% { margin-left:100% } }
@@ -60,9 +66,14 @@
         <span class="text-white/60">音效</span>
         <input id="soundToggle" type="checkbox" checked class="w-4 h-4 accent-orange-500" />
       </label>
-      <p class="text-[11px] text-white/40 mt-2 leading-relaxed">玩法：<b class="text-white/60">单击</b>选中并击飞物体，<b class="text-white/60">拖拽甩动后松手</b>抛掷，撞地高速时自动碎裂。<br/>按住左键拖空白处旋转视角，滚轮缩放。</p>
+      <p class="text-[11px] text-white/40 mt-2 leading-relaxed">鼠标：<b class="text-white/60">单击</b>选中并击飞物体，<b class="text-white/60">拖拽甩动后松手</b>抛掷，撞地高速时自动碎裂。旋转视角：左键拖空白处，滚轮缩放。</p>
+      <button id="handsBtn" class="w-full mt-2 bg-orange-600 hover:bg-orange-500 rounded-lg py-2 text-sm font-bold">🙌 开启手势模式</button>
+      <p id="handsTip" class="text-[11px] text-white/40 mt-1">握拳=连打 · 双手横扫=扫飞 · 捏合=抓取甩出 · 张掌下拍</p>
     </div>
   </div>
+
+  <div id="camBox"><video id="camVideo" autoplay playsinline muted></video></div>
+  <div id="gestureTag">待机</div>
 
   <div id="loading">
     <div class="text-lg font-bold">正在加载 3D 引擎…</div>
@@ -276,6 +287,7 @@
       if (shape === 'can') return new THREE.CylinderGeometry(0.09, 0.09, 0.24, 28);
       if (shape === 'crate') return new THREE.BoxGeometry(0.32, 0.32, 0.32);
       if (shape === 'plate') return new THREE.CylinderGeometry(0.2, 0.2, 0.03, 32);
+      if (shape === 'vase') return new THREE.CylinderGeometry(0.07, 0.13, 0.4, 28);
       return new THREE.BoxGeometry(0.25, 0.25, 0.25);
     }
     function shapeToCannon(shape, geo) {
@@ -306,6 +318,8 @@
       { shape: 'plate', kind: 'ceramic', x: 0.0, y: 1.12, z: 0.6, mass: 0.4 },
       { shape: 'bottle', kind: 'glass', x: -0.6, y: 1.27, z: -0.5, mass: 0.5 },
       { shape: 'can', kind: 'metal', x: 0.6, y: 1.18, z: 0.55, mass: 0.4 },
+      { shape: 'vase', kind: 'ceramic', x: -1.25, y: 1.32, z: -0.55, mass: 0.7 },
+      { shape: 'box', kind: 'wood', x: 1.25, y: 1.22, z: 0.45, mass: 0.8 },
     ];
     function populate() { OBJECT_DEFS.forEach(spawnObject); }
     populate();
@@ -389,11 +403,11 @@
       if (!moved) {
         // 单击：朝远离相机方向击飞
         const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
-        rec.body.wake(); rec.body.applyImpulse(new CANNON.Vec3(dir.x * 2.2, dir.y * 2.2 + 1.2, dir.z * 2.2));
+        rec.body.wakeUp(); rec.body.applyImpulse(new CANNON.Vec3(dir.x * 2.2, dir.y * 2.2 + 1.2, dir.z * 2.2));
         Sound.thud();
       } else {
         const dx = (ev.clientX - dragPrev.x), dy = (ev.clientY - dragPrev.y);
-        rec.body.wake(); rec.body.applyImpulse(new CANNON.Vec3(dx * 0.06, -dy * 0.06 + 1.0, 0));
+        rec.body.wakeUp(); rec.body.applyImpulse(new CANNON.Vec3(dx * 0.06, -dy * 0.06 + 1.0, 0));
         Sound.thud();
       }
     });
@@ -460,8 +474,143 @@
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
+    // ============================================================
+    // 手势识别（阶段二）：MediaPipe Hands + 姿态保持式触发，与鼠标共用同一套动作
+    // ============================================================
+    const gestureTagEl = document.getElementById('gestureTag');
+    let curGesture = '待机';
+    function setGesture(g) { curGesture = g; if (gestureTagEl) gestureTagEl.textContent = g; }
+    const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    function isExtG(lm, tip, pip) { const w = lm[0]; return dist3(lm[tip], w) > dist3(lm[pip], w) * 1.12; }
+    function isFistG(lm) { return [isExtG(lm, 8, 6), isExtG(lm, 12, 10), isExtG(lm, 16, 14), isExtG(lm, 20, 18)].filter(Boolean).length <= 1; }
+    function isOpenPalmG(lm) { return [isExtG(lm, 8, 6), isExtG(lm, 12, 10), isExtG(lm, 16, 14), isExtG(lm, 20, 18)].filter(Boolean).length >= 4; }
+    function isPinchG(lm) { const size = dist3(lm[0], lm[9]) || 1; return dist3(lm[4], lm[8]) < size * 0.45; }
+    const cdG = {}; function canFireG(name, ms) { const t = performance.now(); if (cdG[name] && t - cdG[name] < ms) return false; cdG[name] = t; return true; }
+
+    // 掌心归一化坐标 → 世界空间取点（沿相机方向推入场景深度 T）
+    const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _dir = new THREE.Vector3();
+    const DEPTH_T = 7.5;
+    function palmWorld(lm) {
+      const mx = (lm[0].x + lm[9].x) / 2, my = (lm[0].y + lm[9].y) / 2;
+      _v.set(1 - mx, my, 0.5).unproject(camera);
+      _dir.copy(camera.position).sub(_v).normalize();
+      const p = _v2.copy(camera.position).addScaledVector(_dir, DEPTH_T);
+      return { x: p.x, y: p.y, z: p.z, nx: 1 - mx, ny: my };
+    }
+    function nearestRec(p, maxR) {
+      let best = null, bd = maxR;
+      for (const rec of dynObjects) {
+        const d = Math.hypot(rec.mesh.position.x - p.x, rec.mesh.position.y - p.y, rec.mesh.position.z - p.z);
+        if (d < bd) { bd = d; best = rec; }
+      }
+      return best;
+    }
+    function hitRec(rec, power) {
+      if (!rec) return;
+      const v = rec.body.velocity;
+      rec.body.wakeUp();
+      rec.body.velocity.set(v.x + rand(-1, 1) * power, v.y + power * 0.8, v.z + rand(-1, 1) * power);
+      rec.body.angularVelocity.set(rand(-6, 6), rand(-6, 6), rand(-6, 6));
+      Sound.thud();
+      if (Math.hypot(rec.body.velocity.x, rec.body.velocity.y, rec.body.velocity.z) > 4.6) shatter(rec, 4);
+    }
+    function sweepAll() {
+      const list = dynObjects.slice();
+      if (!list.length) return;
+      Sound.thud();
+      list.forEach(rec => {
+        rec.body.wakeUp();
+        rec.body.applyImpulse(new CANNON.Vec3(rand(-4, 4), rand(2.5, 5), rand(-4, 4)));
+        rec.body.angularVelocity.set(rand(-8, 8), rand(-8, 8), rand(-8, 8));
+        if (Math.hypot(rec.body.velocity.x, rec.body.velocity.y, rec.body.velocity.z) > 3.2) shatter(rec, 4);
+      });
+    }
+
+    let prevPalm = null, pinchHeld = false, grabRec = null, grabPrev = null;
+    function analyzeHandsG(res) {
+      const all = res.multiHandLandmarks || [];
+      if (!all.length) {
+        if (pinchHeld && grabRec && grabPrev) { const v = grabPrev; grabRec.body.wakeUp(); grabRec.body.velocity.set(v.x * 9, v.y * 9 + 1.5, v.z * 9); Sound.thud(); }
+        pinchHeld = false; grabRec = null; setGesture('检测中…无手'); return;
+      }
+      const now = performance.now(), lm = all[0], pc = palmWorld(lm);
+      let vx = 0, vy = 0, dt = 0.016;
+      if (prevPalm) { dt = Math.max(0.001, (now - prevPalm.t) / 1000); vx = (pc.nx - prevPalm.nx) / dt; vy = (pc.ny - prevPalm.ny) / dt; }
+      prevPalm = { x: pc.x, y: pc.y, z: pc.z, nx: pc.nx, ny: pc.ny, t: now };
+
+      if (all.length >= 2 && Math.abs(vx) > 1.4 && canFireG('sweep', 600)) { sweepAll(); setGesture('双手横扫'); return; }
+      if (isFistG(lm)) {
+        setGesture('握拳');
+        if (canFireG('hit', 340)) hitRec(nearestRec(pc, 999) || dynObjects[0] || null, 1.2);
+        return;
+      }
+      if (isPinchG(lm)) {
+        if (!pinchHeld) { grabRec = nearestRec(pc, 1.5); pinchHeld = true; }
+        else if (grabRec) {
+          grabRec.body.wakeUp();
+          grabRec.body.velocity.set((pc.x - grabRec.mesh.position.x) * 6, (pc.y - grabRec.mesh.position.y) * 6, (pc.z - grabRec.mesh.position.z) * 6);
+          grabRec.body.position.set(pc.x, pc.y, pc.z); grabRec.mesh.position.copy(pc);
+          grabPrev = { x: (pc.x - (prevPalm ? prevPalm.x : pc.x)) / dt, y: (pc.y - (prevPalm ? prevPalm.y : pc.y)) / dt, z: (pc.z - (prevPalm ? prevPalm.z : pc.z)) / dt };
+        }
+        setGesture('捏合抓取'); return;
+      }
+      if (pinchHeld) {
+        pinchHeld = false;
+        if (grabRec && grabPrev) { grabRec.body.wakeUp(); grabRec.body.velocity.set(grabPrev.x * 9, grabPrev.y * 9 + 1.5, grabPrev.z * 9); Sound.thud(); }
+        grabRec = null;
+      }
+      if (isOpenPalmG(lm) && vy > 1.8 && canFireG('slap', 500)) { hitRec(nearestRec(pc, 1.2), 1.6); setGesture('下拍'); return; }
+      if (isOpenPalmG(lm) && canFireG('push', 700)) { const r = nearestRec(pc, 1.2); if (r) { r.body.wakeUp(); r.body.applyImpulse(new CANNON.Vec3(0, 0.5, -1.4)); setGesture('前推'); return; } }
+      if (isOpenPalmG(lm)) { setGesture('张掌'); return; }
+      setGesture('手中');
+    }
+
+    let handsGen = null, handsRunning = false, mpCam = null;
+    async function startHands() {
+      Sound.init(); Sound.resume();
+      if (typeof Hands === 'undefined') { showErr('手势引擎未能加载，请检查网络后刷新（鼠标玩法仍可用）'); return; }
+      if (handsRunning) { stopHands(); return; }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+        const video = document.getElementById('camVideo');
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+        document.getElementById('camBox').style.display = 'block';
+        gestureTagEl.style.display = 'block';
+        if (!handsGen) {
+          handsGen = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}` });
+          handsGen.setOptions({ maxNumHands: 2, modelComplexity: 0, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+          handsGen.onResults(analyzeHandsG);
+        }
+        let lastSend = 0;
+        const loop = () => {
+          if (!handsRunning) return;
+          if (video.readyState >= 2 && performance.now() - lastSend > 90) { lastSend = performance.now(); handsGen.send({ image: video }); }
+          requestAnimationFrame(loop);
+        };
+        handsRunning = true;
+        const btn = document.getElementById('handsBtn');
+        btn.textContent = '🙌 关闭手势模式'; btn.classList.replace('bg-orange-600', 'bg-white/10'); btn.classList.replace('hover:bg-orange-500', 'hover:bg-white/20');
+        requestAnimationFrame(loop);
+        setGesture('手势已开启');
+      } catch (e) {
+        showErr('摄像头不可用：' + e.message + '（鼠标玩法仍可用）');
+      }
+    }
+    function stopHands() {
+      handsRunning = false;
+      const v = document.getElementById('camVideo');
+      if (v && v.srcObject) { v.srcObject.getTracks().forEach(t => t.stop()); v.srcObject = null; }
+      document.getElementById('camBox').style.display = 'none';
+      gestureTagEl.style.display = 'none';
+      const btn = document.getElementById('handsBtn');
+      btn.textContent = '🙌 开启手势模式'; btn.classList.replace('bg-white/10', 'bg-orange-600'); btn.classList.replace('hover:bg-white/20', 'hover:bg-orange-500');
+      setGesture('待机');
+    }
+    document.getElementById('handsBtn').addEventListener('click', startHands);
+
     // 首帧成功后隐藏 loading
-    window.__rage3d = { THREE, renderer, scene, camera, controls, world, dynObjects, chunks, shatter, reset };
+    window.__rage3d = { THREE, renderer, scene, camera, controls, world, dynObjects, chunks, shatter, reset, setGesture, analyzeHandsG, startHands, stopHands, isHandsOn: () => handsRunning };
     try {
       renderer.render(scene, camera);
       document.getElementById('loading').style.display = 'none';
