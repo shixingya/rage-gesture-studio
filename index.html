@@ -454,6 +454,7 @@
             <li><b class="text-amber-300">Q</b> 循环切换场景（办公室/空发泄房/卧室） · <b class="text-amber-300">R</b> 收拾残局复活碎物</li>
             <li><b class="text-amber-300">空格 / P</b> 暂停 · <b class="text-amber-300">M</b> 静音</li>
             <li><b class="text-amber-300">← / →</b> 循环切换选中对象</li>
+            <li><b class="text-amber-300">B</b> 怒气≥半时提前释放狂暴</li>
             <li><b class="text-amber-300">D</b> 开关调试面板</li>
             <li><b class="text-amber-300">? / H</b> 开关本说明</li>
             <li><b class="text-amber-300">Esc</b> 关闭弹窗</li>
@@ -2816,6 +2817,8 @@
       // ← / → 循环切换选中对象
       if (e.key === 'ArrowRight') { e.preventDefault(); cycleSelect(1); return; }
       if (e.key === 'ArrowLeft') { e.preventDefault(); cycleSelect(-1); return; }
+      // B 提前手动释放狂暴（需怒气≥半且未暂停/未狂暴中）
+      if (e.key === 'b' || e.key === 'B') { if (state.paused || state.berserk) return; if (state.rage >= 50) { triggerBerserk(); } else spawnFloater(CANVAS_W / 2, 200, '😤 怒气不足一半，多砸几下攒怒气！', '#fdba74'); return; }
       // 键盘 1-6 模拟手势
       const simMap = {'1':'hit','2':'grab','3':'slap','4':'push','5':'sweep','6':'scare'};
       if (simMap[e.key]) { simGesture(simMap[e.key]); }
