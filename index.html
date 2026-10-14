@@ -577,6 +577,8 @@
       highContrast: false,    // 无障碍：高对比模式（关压暗与暗角）
       // —— 成就 & 挑战 ——
       unlockedAch: [],        // 已解锁成就 id
+      _colored: false,        // 本会话是否用过自定义上色（成就用）
+      _lowGrav: false,        // 本会话是否体验过低重力（成就用）
       celebrated: [],         // 本局已庆祝的分数里程碑
       quests: null,           // 每日目标系统（initQuests 初始化）
       challenge: { active: false, timeLeft: 60, score: 0, spawnTimer: 0, best: 0, scores: [], diff: 'normal' },
@@ -632,6 +634,8 @@
       { id: 'score_1000',  name: '小有所成', desc: '本局得分达 1000', icon: '🎯', cond: () => state.score >= 1000 },
       { id: 'score_5000',  name: '宣泄大师', desc: '本局得分达 5000', icon: '🏆', cond: () => state.score >= 5000 },
       { id: 'berserk_1',   name: '理性崩塌', desc: '首次进入狂暴模式', icon: '😡', cond: () => state._berserkSeen },
+      { id: 'colorist',    name: '色彩玩家', desc: '首次给物体上色', icon: '🎨', cond: () => state._colored },
+      { id: 'moon_walk',   name: '月球漫步', desc: '首次体验低重力（≤0.3x）', icon: '🌙', cond: () => state._lowGrav },
     ];
     const achToastBox = document.getElementById('achToastBox');
     function checkAchievements() {
@@ -2707,6 +2711,7 @@
       if (!o) { spawnFloater(CANVAS_W / 2, 200, '请先选中一个物体', '#fdba74'); return; }
       if (o.base) { spawnFloater(o.x, o.y - o.h / 2 - 30, '固定件不能上色', '#fca5a5'); return; }
       o.color = color;
+      if (color) { state._colored = true; checkAchievements(); }
       spawnFloater(o.x, o.y - o.h / 2 - 30, color ? '🎨 已上色' : '🎨 已还原', color || '#cbd5e1');
       Sound.click();
     }
@@ -2995,7 +3000,7 @@
     sensSlider.addEventListener('input', () => { state.sensitivity = sensSlider.value / 10; sensVal.textContent = state.sensitivity.toFixed(1); Store.save({ sensitivity: state.sensitivity }); });
     // 重力/弹力滑块
     const gravSlider = document.getElementById('gravSlider'), gravVal = document.getElementById('gravVal');
-    gravSlider.addEventListener('input', () => { state.gravityScale = gravSlider.value / 100; gravVal.textContent = state.gravityScale.toFixed(1) + 'x'; Store.save({ gravityScale: state.gravityScale }); });
+    gravSlider.addEventListener('input', () => { state.gravityScale = gravSlider.value / 100; gravVal.textContent = state.gravityScale.toFixed(1) + 'x'; Store.save({ gravityScale: state.gravityScale }); if (state.gravityScale <= 0.3) { state._lowGrav = true; checkAchievements(); } });
     const bounceSlider = document.getElementById('bounceSlider'), bounceVal = document.getElementById('bounceVal');
     bounceSlider.addEventListener('input', () => { state.bounceScale = bounceSlider.value / 100; bounceVal.textContent = state.bounceScale.toFixed(2); Store.save({ bounceScale: state.bounceScale }); });
     // 重力预设（月球/地球/木星）
