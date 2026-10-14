@@ -56,13 +56,14 @@
     </div>
     <div id="scoreBox" class="absolute left-5 top-24 overlay-title">
       <div class="text-3xl font-black text-white/90" id="scoreVal">0</div>
-      <div class="text-xs text-white/50">宣泄值</div>
+      <div class="text-xs text-white/50">宣泄值 · <span id="bestVal">最高 0</span></div>
     </div>
     <div id="toast" class="overlay-title" style="position:absolute; left:50%; top:32%; transform:translateX(-50%) translateY(-12px); font-size:28px; font-weight:900; opacity:0; transition:opacity .25s, transform .25s; text-shadow:0 2px 10px rgba(0,0,0,.7);"></div>
     <div id="dropzone" class="pointer-events-auto">
       <h2 class="font-bold text-sm mb-2 text-white/80">控制</h2>
       <button id="smashAllBtn" class="w-full mb-2 bg-red-600 hover:bg-red-500 rounded-lg py-2 text-sm font-bold">💥 砸碎全部</button>
       <button id="resetBtn" class="w-full mb-2 bg-white/10 hover:bg-white/20 rounded-lg py-2 text-xs">🔄 重置场景</button>
+      <button id="lightBtn" class="w-full mb-2 bg-white/10 hover:bg-white/20 rounded-lg py-2 text-xs">🌙 切换夜景</button>
       <label class="flex items-center justify-between text-xs py-1">
         <span class="text-white/60">自动旋转视角</span>
         <input id="orbitToggle" type="checkbox" class="w-4 h-4 accent-orange-500" />
@@ -90,6 +91,10 @@
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
     import * as CANNON from 'cannon-es';
 
     const showErr = (msg) => { const e = document.getElementById('loadErr'); if (e) { e.textContent = msg; e.classList.remove('hidden'); } };
@@ -167,6 +172,16 @@
     scene.add(sun);
     const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x3a2f28, 0.55);
     scene.add(hemi);
+
+    // 后期处理：泛光（窗光/金属高光通透）；失败则降级为直接渲染，不阻断页面
+    let composer = null;
+    try {
+      composer = new EffectComposer(renderer);
+      composer.addPass(new RenderPass(scene, camera));
+      composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.28, 0.6, 0.82));
+      composer.addPass(new OutputPass());
+      composer.setSize(window.innerWidth, window.innerHeight);
+    } catch (e) { composer = null; }
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -312,7 +327,11 @@
     // ============================================================
     const dynObjects = [];   // { mesh, body, kind, breakable }
     let objId = 0;
-    let score = 0, combo = 0, comboTimer = null;
+    // 宣泄值持久化（与 2D 版分开的 key，互不干扰）
+    const SAVE_KEY = 'rage_gesture_studio_3d_v1';
+    function loadSave() { try { return JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'); } catch (e) { return {}; } }
+    function persist() { try { const s = loadSave(); if (score > (s.best || 0)) s.best = score; localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch (e) {} }
+    let score = loadSave().score || 0, best = loadSave().best || 0, combo = 0, comboTimer = null;
 
     function pbrMaterial(kind) {
       if (kind === 'glass') return new THREE.MeshPhysicalMaterial({ color: 0xbfe3ff, metalness: 0, roughness: 0.05, transmission: 0.9, thickness: 0.6, ior: 1.5, clearcoat: 1, transparent: true, opacity: 0.9 });
@@ -396,7 +415,8 @@
       rec.mesh.geometry.dispose();
       combo++; if (comboTimer) clearTimeout(comboTimer); comboTimer = setTimeout(() => { combo = 0; }, 2500);
       score += (rec.kind === 'glass' ? 150 : rec.kind === 'metal' ? 120 : rec.kind === 'ceramic' ? 100 : 80);
-      updateScoreHud();
+      if (score > best) best = score;
+      persist(); updateScoreHud();
       if (combo > 1) toast('连击 ×' + combo, combo >= 5 ? '#fca5a5' : '#fdba74');
     }
 
@@ -412,7 +432,7 @@
       }
     }
     function rand(a, b) { return a + Math.random() * (b - a); }
-    function updateScoreHud() { const s = document.getElementById('scoreVal'); if (s) s.textContent = score.toLocaleString(); }
+    function updateScoreHud() { const s = document.getElementById('scoreVal'); if (s) s.textContent = score.toLocaleString(); const b = document.getElementById('bestVal'); if (b) b.textContent = '最高 ' + best.toLocaleString(); }
     function toast(text, color) { const t = document.getElementById('toast'); if (!t) return; t.textContent = text; t.style.color = color || '#fff'; t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)'; clearTimeout(toast._h); toast._h = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(-12px)'; }, 900); }
 
     // ============================================================
@@ -466,6 +486,27 @@
       dynObjects.slice().forEach(rec => shatter(rec, 3));
     });
     document.getElementById('resetBtn').addEventListener('click', () => reset());
+
+    // 昼夜光照切换（夜景：暖色低环境 + 窗户月光 + 曝光降低）
+    const DAY = { sunI: 2.6, sunC: 0xfff2e0, hemiI: 0.55, hemiS: 0xcfe3ff, hemiG: 0x3a2f28, expo: 1.05, bg: 0x0b0d12, fogC: 0x0b0d12, paneI: 1.6, shaftI: 60 };
+    const NIGHT = { sunI: 0.5, sunC: 0x8faed0, hemiI: 0.16, hemiS: 0x2a3a5a, hemiG: 0x120e0a, expo: 0.78, bg: 0x05060a, fogC: 0x05060a, paneI: 0.6, shaftI: 18 };
+    let isNight = false;
+    function applyLighting(p) {
+      sun.intensity = p.sunI; sun.color.setHex(p.sunC);
+      hemi.intensity = p.hemiI; hemi.color.setHex(p.hemiS); hemi.groundColor.setHex(p.hemiG);
+      renderer.toneMappingExposure = p.expo;
+      scene.background.setHex(p.bg); scene.fog.color.setHex(p.fogC);
+      scene.traverse(o => {
+        if (o.isMesh && o.material && o.material.emissive && o.material.emissiveIntensity > 0) o.material.emissiveIntensity = p.paneI;
+        if (o.isSpotLight) o.intensity = p.shaftI;
+      });
+    }
+    document.getElementById('lightBtn').addEventListener('click', () => {
+      isNight = !isNight;
+      applyLighting(isNight ? NIGHT : DAY);
+      document.getElementById('lightBtn').textContent = isNight ? '☀️ 切换白天' : '🌙 切换夜景';
+      Sound.init(); Sound.resume(); Sound.thud();
+    });
     document.getElementById('soundToggle').addEventListener('change', (e) => Sound.setEnabled(e.target.checked));
     document.getElementById('orbitToggle').addEventListener('change', (e) => { controls.autoRotate = e.target.checked; controls.autoRotateSpeed = 1.0; });
 
@@ -516,12 +557,13 @@
       }
       if (motes) { const pa = motes.geometry.attributes.position.array; for (let i = 1; i < pa.length; i += 3) { pa[i] += dt * 0.06; if (pa[i] > 4.4) pa[i] = 0.2; } motes.geometry.attributes.position.needsUpdate = true; motes.rotation.y += dt * 0.012; }
       controls.update();
-      renderer.render(scene, camera);
+      if (composer) composer.render(); else renderer.render(scene, camera);
     }
 
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
+      if (composer) composer.setSize(window.innerWidth, window.innerHeight);
     });
 
     // ============================================================
@@ -660,9 +702,10 @@
     document.getElementById('handsBtn').addEventListener('click', startHands);
 
     // 首帧成功后隐藏 loading
-    window.__rage3d = { THREE, renderer, scene, camera, controls, world, dynObjects, chunks, shatter, reset, setGesture, analyzeHandsG, startHands, stopHands, isHandsOn: () => handsRunning };
+    window.__rage3d = { THREE, renderer, scene, camera, controls, world, dynObjects, chunks, shatter, reset, setGesture, analyzeHandsG, startHands, stopHands, isHandsOn: () => handsRunning, composer, applyLighting, isNightOn: () => isNight };
     try {
-      renderer.render(scene, camera);
+      if (composer) composer.render(); else renderer.render(scene, camera);
+      updateScoreHud();
       document.getElementById('loading').style.display = 'none';
       animate();
     } catch (e) { showErr('初始化渲染失败：' + e.message); }
